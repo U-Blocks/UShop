@@ -1,0 +1,11 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "endstone-ushop"
+version = "250120"
+description = "Null"
+
+[project.entry-points."endstone"]
+ushop = "endstone_ushop:ushop"
