@@ -13,8 +13,11 @@
     <br />Just put this plugin into plugins folder, and then start the server. Enter the command /us to call out the main form.
     <br />
     <br />:pencil:Wiki
-    <br />:link:Under construction...
+    <br />:link: Under construction...
     <br /><img height="350" src="https://github.com/umarurize/UShop/blob/master/logo/UShop2.png" />
+    <br />
+    <br />:hammer: Features Indev
+    <br /> [1] Once the API is more complete, I will develop player-owned shops and player trading features.
     <br />
     <br />:star: If you like my plugins, give me a star plz.
   </samp>
