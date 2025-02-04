@@ -196,14 +196,17 @@ class ushop(Plugin):
         def on_click(player: Player):
             textinput1 = TextInput(
                 label=f'{ColorFormat.GREEN}原商品分类名： {ColorFormat.WHITE}{category_name}\n'
-                      f'{ColorFormat.GREEN}输入新的商品分类名（留空则保留原商品分类名）...',
-                placeholder='请输入任意字符串或留空...'
+                      f'{ColorFormat.GREEN}输入新的商品分类名...\n'
+                      f'{ColorFormat.GREEN}（请输入任意字符串, 但不能留空...）',
+                placeholder='请输入任意字符串, 但不能留空...',
+                default_value=category_name
             )
             textinput2 = TextInput(
                 label=f'{ColorFormat.GREEN}原商品分类图标路径： {ColorFormat.WHITE}{self.shop_data[category_name]["category_icon"]}\n'
-                      f'{ColorFormat.GREEN}输入新的商品分类图标路径, 输入 clear 则清除图标\n'
-                      f'（留空则保留原商品分类图标路径）...',
-                placeholder='请输入材质路径或 url 或留空...'
+                      f'{ColorFormat.GREEN}输入新的商品分类图标路径...\n'
+                      f'（请输入材质路径或 url 或留空...）',
+                placeholder='请输入材质路径或 url 或留空...',
+                default_value=self.shop_data[category_name]['category_icon']
             )
             update_shop_category_form = ModalForm(
                 title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}更新 {category_name} 商品分类',
@@ -213,16 +216,14 @@ class ushop(Plugin):
             )
             def on_submit(player: Player, json_str):
                 data = json.loads(json_str)
+                # 判断 textinput1 是否被填写
                 if len(data[0]) == 0:
-                    update_category_name = category_name
-                else:
-                    update_category_name = data[0]
-                if len(data[1]) == 0:
-                    update_category_icon = self.shop_data[category_name]['category_icon']
-                elif data[1] == 'clear':
-                    update_category_icon = ''
-                else:
-                    update_category_icon = data[1]
+                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                    return
+                update_category_name = data[0]
+                # 读取新的材质路径（无视留空, 留空将自动不显示图标）
+                update_category_icon = data[1]
+                # 更新分类
                 self.shop_data[update_category_name] = self.shop_data[category_name]
                 if update_category_name != category_name:
                     self.shop_data.pop(category_name)
@@ -295,7 +296,12 @@ class ushop(Plugin):
                     player_name = player.name
                 self.server.dispatch_command(self.CommandSenderWrapper,
                                              f'give {player_name} {good_type} {good_to_buy_amount}')
-                player.send_message(f'{ColorFormat.YELLOW}购买商品成功...')
+                # 向玩家播放村民肯定的声音
+                self.server.dispatch_command(self.CommandSenderWrapper,
+                                             f'playsound mob.villager.yes {player_name}')
+                # 更加完整的信息提示
+                player.send_message(f'{ColorFormat.YELLOW}购买商品成功： {ColorFormat.RED}-{good_to_buy_total_price}, '
+                                    f'{ColorFormat.YELLOW}余额： {ColorFormat.WHITE}{self.money_data[player.name]}')
             good_buy_form.on_submit = on_submit
             player.send_form(good_buy_form)
         return on_click
@@ -354,7 +360,12 @@ class ushop(Plugin):
                     player_name = player.name
                 self.server.dispatch_command(self.CommandSenderWrapper,
                                              f'clear {player_name} {good_type} 0 {good_to_reclaim_amount}')
-                player.send_message(f'{ColorFormat.YELLOW}回收商品成功...')
+                # 向玩家播放村民肯定的声音
+                self.server.dispatch_command(self.CommandSenderWrapper,
+                                             f'playsound mob.villager.yes {player_name}')
+                # 更加完整的信息提示
+                player.send_message(f'{ColorFormat.YELLOW}回收商品成功： {ColorFormat.GREEN}+{good_to_reclaim_total_price}, '
+                                    f'{ColorFormat.YELLOW}余额： {ColorFormat.WHITE}{self.money_data[player.name]}')
             good_reclaim_form.on_submit = on_submit
             player.send_form(good_reclaim_form)
         return on_click
@@ -376,13 +387,17 @@ class ushop(Plugin):
         def on_click(player: Player):
             textinput1 = TextInput(
                 label=f'{ColorFormat.GREEN}原商品名： {ColorFormat.WHITE}{good_name}\n'
-                      f'{ColorFormat.GREEN}输入新的商品名（留空则保留原商品名）',
-                placeholder='请输入任意字符串或留空'
+                      f'{ColorFormat.GREEN}输入新的商品名...\n'
+                      f'{ColorFormat.GREEN}（请输入任意字符串, 但不能留空...）',
+                placeholder='请输入任意字符串, 但不能留空...',
+                default_value=good_name
             )
             textinput2 = TextInput(
                 label=f'{ColorFormat.GREEN}原商品价单价： {ColorFormat.WHITE}{good_price}\n'
-                      f'{ColorFormat.GREEN}输入新的商品单价（留空则保留原商品商品单价）',
-                placeholder='请输入一个正整数, 例如： 5'
+                      f'{ColorFormat.GREEN}输入新的商品单价...\n'
+                      f'{ColorFormat.GREEN}（请输入一个正整数, 例如： 5...）',
+                placeholder='请输入一个正整数, 例如： 5...',
+                default_value=f'{good_price}'
             )
             good_update_form = ModalForm(
                 title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}更新商品 {good_name}',
@@ -392,21 +407,21 @@ class ushop(Plugin):
             )
             def on_submit(player: Player, json_str):
                 data = json.loads(json_str)
+                # 判断 textinput1 是否被填写
+                if len(data[0]) == 0:
+                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                    return
+                update_good_name = data[0]
+                # 判断 textinput2 是否填写了正确的数字类型
                 try:
-                    if len(data[0]) == 0:
-                        update_good_name = good_name
-                    else:
-                        update_good_name = data[0]
-                    if len(data[1]) == 0:
-                        update_good_price = good_price
-                    else:
-                        update_good_price = int(data[1])
+                    update_good_price = int(data[1])
                 except:
                     player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
                     return
                 if update_good_price <= 0:
                     player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
                     return
+                # 更新
                 self.shop_data[category_name][good_type]['good_name'] = update_good_name
                 self.shop_data[category_name][good_type]['good_price'] = update_good_price
                 self.save_shop_data()
@@ -522,8 +537,10 @@ class ushop(Plugin):
         current_reclaim_rate = self.config_data['reclaim_rate']
         textinput = TextInput(
             label=f'{ColorFormat.GREEN}当前商品回收价率： {ColorFormat.WHITE}{current_reclaim_rate}\n'
-                  f'{ColorFormat.GREEN}输入新的商品回收价率, 留空则保留原有商品回收价率',
-            placeholder='请输入一个不大于1的小数或留空...'
+                  f'{ColorFormat.GREEN}输入新的商品回收价率...\n'
+                  f'{ColorFormat.GREEN}（请输入一个不大于1的正小数...）',
+            placeholder='请输入一个不大于1的正小数...',
+            default_value=f'{current_reclaim_rate}'
         )
         reload_reclaim_rate_form = ModalForm(
             title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}重载配置文件',
@@ -533,18 +550,16 @@ class ushop(Plugin):
         )
         def on_submit(player: Player, json_str):
             data = json.loads(json_str)
+            # 判断 textinput 是否填写了正确的小数类型
             try:
-                if len(data[0]) == 0:
-                    new_reclaim_rate = current_reclaim_rate
-                else:
-                    new_reclaim_rate = float(data[0])
+                update_reclaim_rate = float(data[0])
             except:
                 player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
                 return
-            if new_reclaim_rate > 1:
+            if update_reclaim_rate > 1 or update_reclaim_rate <= 0:
                 player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
                 return
-            self.config_data['reclaim_rate'] = new_reclaim_rate
+            self.config_data['reclaim_rate'] = update_reclaim_rate
             self.save_config_data()
             player.send_message(f'{ColorFormat.YELLOW}重载商店回收价率成功...')
         reload_reclaim_rate_form.on_submit = on_submit
