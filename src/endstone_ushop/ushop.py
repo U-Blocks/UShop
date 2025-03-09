@@ -95,6 +95,7 @@ class ushop(Plugin):
                 main_form.add_button(f'{ColorFormat.YELLOW}添加新分类', icon='textures/ui/color_plus', on_click=self.add_new_category)
                 main_form.add_button(f'{ColorFormat.YELLOW}开启/关闭添加商品模式', icon='textures/ui/toggle_on', on_click=self.switch_to_add_good_mode)
                 main_form.add_button(f'{ColorFormat.YELLOW}重载配置文件', icon='textures/ui/icon_setting', on_click=self.reload_config_data)
+            main_form.add_button(f'{ColorFormat.YELLOW}商品搜索', icon='textures/ui/magnifyingGlass', on_click=self.good_search)
             main_form.add_button(f'{ColorFormat.YELLOW}商品收藏', icon='textures/ui/icon_blackfriday', on_click=self.player_good_collection)
             for key in self.shop_data.keys():
                 category_name = key
@@ -154,13 +155,12 @@ class ushop(Plugin):
                 shop_category_form.add_button(f'{ColorFormat.YELLOW}编辑该商品分类', icon='textures/ui/hammer_l', on_click=self.edit_shop_category(category_name))
             for key, value in self.shop_data[category_name].items():
                 if key == 'category_icon':
-                    pass
-                else:
-                    good_type = key
-                    good_price = self.shop_data[category_name][good_type]['good_price']
-                    good_name = self.shop_data[category_name][good_type]['good_name']
-                    shop_category_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n'
-                                                  f'{ColorFormat.GREEN}单价： {good_price}', on_click=self.good_info(category_name, good_type, good_name, good_price))
+                    continue
+                good_type = key
+                good_price = self.shop_data[category_name][good_type]['good_price']
+                good_name = self.shop_data[category_name][good_type]['good_name']
+                shop_category_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n'
+                                              f'{ColorFormat.GREEN}单价： {good_price}', on_click=self.good_info(category_name, good_type, good_name, good_price))
             player.send_form(shop_category_form)
         return on_click
 
@@ -373,6 +373,47 @@ class ushop(Plugin):
             good_reclaim_form.on_submit = on_submit
             player.send_form(good_reclaim_form)
         return on_click
+
+    def good_search(self, player: Player):
+        textinput = TextInput(
+            label=f'{ColorFormat.GREEN}输入关键词...',
+            placeholder='请输入任意字符串...'
+        )
+        good_search_form = ModalForm(
+            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}商品搜索',
+            controls=[textinput],
+            submit_button=f'{ColorFormat.YELLOW}搜索',
+            on_close=self.back_to_main_form
+        )
+        def on_submit(player: Player, json_str):
+            data = json.loads(json_str)
+            if len(data[0]) == 0:
+                player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                return
+            keyword = data[0]
+            good_search_result_form = ActionForm(
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}商品搜索结果',
+                on_close=self.back_to_main_form
+            )
+            for key, value in self.shop_data.items():
+                category_name = key
+                category_info = value
+                for key in category_info.keys():
+                    if key == 'category_icon':
+                        continue
+                    good_type = key
+                    good_name = self.shop_data[category_name][good_type]['good_name']
+                    good_price = self.shop_data[category_name][good_type]['good_price']
+                    if keyword in good_name:
+                        good_search_result_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n'
+                                                           f'{ColorFormat.GREEN}单价： {good_price}', on_click=self.good_info(category_name, good_type, good_name, good_price))
+            if len(good_search_result_form.buttons) == 0:
+                player.send_message(f'{ColorFormat.RED}无匹配结果...')
+            else:
+                good_search_result_form.content = f'{ColorFormat.GREEN}匹配到 {ColorFormat.WHITE}{len(good_search_result_form.buttons)} {ColorFormat.GREEN}个结果...'
+                player.send_form(good_search_result_form)
+        good_search_form.on_submit = on_submit
+        player.send_form(good_search_form)
 
     def good_collect(self, category_name, good_type, good_name, good_price):
         def on_click(player: Player):
