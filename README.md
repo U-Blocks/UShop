@@ -8,7 +8,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/endstone)](https://pypi.org/project/endstone)
 
 ### Introductions
-* **Rich features:** `good purchase`, `good recycling`, `good collection`
+* **Rich features:** `good purchase`, `good recycling`, `good collection`, `good search`
 * **Easy to edit:** `good category add/remove/edit`, `good add/remove/edit`
 * **Full GUI:** Beautiful GUI forms for easy operation rather than commands.
 * **Hot reload support:** Operators can edit/update `config.json` or `shop.json` in game directly.
