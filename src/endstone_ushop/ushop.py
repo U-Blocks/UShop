@@ -1,26 +1,40 @@
 import os
 import json
+
+from endstone_ushop.lang import lang
+
 from endstone.plugin import Plugin
 from endstone import ColorFormat, Player
 from endstone.command import Command, CommandSender, CommandSenderWrapper
 from endstone.form import ActionForm, ModalForm, Dropdown, TextInput
-from endstone.event import event_handler, PlayerInteractEvent, PlayerJoinEvent
+from endstone.event import event_handler, PlayerInteractEvent
 
 current_dir = os.getcwd()
 first_dir = os.path.join(current_dir, 'plugins', 'ushop')
 if not os.path.exists(first_dir):
     os.mkdir(first_dir)
+
+lang_dir = os.path.join(first_dir, 'lang')
+if not os.path.exists(lang_dir):
+    os.mkdir(lang_dir)
+
 shop_data_file_path = os.path.join(first_dir, 'shop.json')
-good_collection_data_file_path = os.path.join(first_dir, 'good-collection.json')
 config_data_file_path = os.path.join(first_dir, 'config.json')
+
 menu_data_file_path = os.path.join(current_dir, 'plugins', 'zx_ui')
 money_data_file_path = os.path.join(current_dir, 'plugins', 'umoney', 'money.json')
 
+
 class ushop(Plugin):
-    api_version = '0.6'
+    api_version = '0.7'
 
     def on_enable(self):
-        # 加载商店数据
+        # Check whether pre-plugin UMoney is installed.
+        if not os.path.exists(money_data_file_path):
+            self.logger.error(f'{ColorFormat.RED}缺少前置 UMoney...')
+            self.server.plugin_manager.disable_plugin(self)
+
+        # Load shop data
         if not os.path.exists(shop_data_file_path):
             shop_data = {}
             with open(shop_data_file_path, 'w', encoding='utf-8') as f:
@@ -29,8 +43,25 @@ class ushop(Plugin):
         else:
             with open(shop_data_file_path, 'r', encoding='utf-8') as f:
                 shop_data = json.loads(f.read())
+
+        # Initialize shop data
+        if len(shop_data) != 0:
+            for catgory_info in shop_data.values():
+                for key, value in catgory_info.items():
+                    if key == 'category_icon':
+                        continue
+                    if value.get('good_mode') is None:
+                        value['good_mode'] = 'purchase_and_reclaim'
+                    if value.get('collectors') is None:
+                        value['collectors'] = []
+
+            with open(shop_data_file_path, 'w+', encoding='utf-8') as f:
+                json_str = json.dumps(shop_data, indent=4, ensure_ascii=False)
+                f.write(json_str)
+
         self.shop_data = shop_data
-        # 加载配置文件数据
+
+        # Load config data
         if not os.path.exists(config_data_file_path):
             config_data = {
                 'reclaim_rate': 0.5
@@ -42,31 +73,21 @@ class ushop(Plugin):
             with open(config_data_file_path, 'r', encoding='utf-8') as f:
                 config_data = json.loads(f.read())
         self.config_data = config_data
-        # 加载玩家商品收藏数据
-        if not os.path.exists(good_collection_data_file_path):
-            good_collection_data = {}
-            with open(good_collection_data_file_path, 'w', encoding='utf-8') as f:
-                json_str = json.dumps(good_collection_data, indent=4, ensure_ascii=False)
-                f.write(json_str)
-        else:
-            with open(good_collection_data_file_path, 'r', encoding='utf-8') as f:
-                good_collection_data = json.loads(f.read())
-        self.good_collection_data = good_collection_data
-        # 检测前置 UMoney 是否安装
-        if not os.path.exists(money_data_file_path):
-            self.logger.error(f'{ColorFormat.RED}缺少前置 UMoney...')
-            self.server.plugin_manager.disable_plugin(self)
-        self.CommandSenderWrapper = CommandSenderWrapper(
+
+        # Load lang data
+        self.lang_data = lang.load_lang(self, lang_dir)
+
+        self.command_sender = CommandSenderWrapper(
             self.server.command_sender,
             on_message=None
         )
         self.player_with_add_good_mode_list = []
         self.register_events(self)
-        self.logger.info(f'{ColorFormat.YELLOW}UShop 已启用...')
+        self.logger.info(f'{ColorFormat.YELLOW}UShop is enabled...')
 
     commands = {
         'us': {
-            'description': '打开商店主表单',
+            'description': 'Call out main form of UShop',
             'usages': ['/us'],
             'permissions': ['ushop.command.us']
         }
@@ -74,246 +95,500 @@ class ushop(Plugin):
 
     permissions = {
         'ushop.command.us': {
-            'description': '打开商店主表单',
+            'description': 'Call out main form of UShop',
             'default': True
         }
     }
 
-    def on_command(self, sender: CommandSender, command: Command, args: list[str]):
+    def on_command(self, sender: CommandSender, command: Command, args: list[str]) -> None:
         if command.name == 'us':
             if not isinstance(sender, Player):
-                sender.send_message(f'{ColorFormat.RED}该命令只能由玩家执行...')
+                sender.send_message(f'{ColorFormat.RED}This command can only be executed by a player...')
                 return
             player = sender
             player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
             main_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}商店主表单',
-                content=f'{ColorFormat.GREEN}余额： {ColorFormat.WHITE}{player_money}\n'
-                        f'{ColorFormat.GREEN}请选择操作...'
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "main_form.title")}',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "your_money")}: '
+                        f'{ColorFormat.WHITE}{player_money}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "main_form.content")}'
             )
-            if player.is_op == True:
-                main_form.add_button(f'{ColorFormat.YELLOW}添加新分类', icon='textures/ui/color_plus', on_click=self.add_new_category)
-                main_form.add_button(f'{ColorFormat.YELLOW}开启/关闭添加商品模式', icon='textures/ui/toggle_on', on_click=self.switch_to_add_good_mode)
-                main_form.add_button(f'{ColorFormat.YELLOW}重载配置文件', icon='textures/ui/icon_setting', on_click=self.reload_config_data)
-            main_form.add_button(f'{ColorFormat.YELLOW}商品搜索', icon='textures/ui/magnifyingGlass', on_click=self.good_search)
-            main_form.add_button(f'{ColorFormat.YELLOW}商品收藏', icon='textures/ui/icon_blackfriday', on_click=self.player_good_collection)
-            for key in self.shop_data.keys():
-                category_name = key
+            if player.is_op:
+                main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.add_shop_category")}',
+                                     icon='textures/ui/color_plus', on_click=self.add_shop_category)
+                main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.toggle_add_good_mode")}',
+                                     icon='textures/ui/toggle_on', on_click=self.toggle_add_good_mode)
+                main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.reload_config")}',
+                                     icon='textures/ui/icon_setting', on_click=self.reload_config_data)
+            main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.search_good")}',
+                                 icon='textures/ui/magnifyingGlass', on_click=self.good_search)
+            main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.collect_good")}',
+                                 icon='textures/ui/icon_blackfriday', on_click=self.good_collection)
+
+            for category_name in self.shop_data.keys():
                 category_icon = self.shop_data[category_name]['category_icon']
-                main_form.add_button(f'{ColorFormat.YELLOW}{category_name}', icon=category_icon, on_click=self.shop_category(category_name))
+                main_form.add_button(f'{ColorFormat.YELLOW}{category_name}',
+                                     icon=category_icon, on_click=self.shop_category(category_name))
+
             if os.path.exists(menu_data_file_path):
-                main_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_menu)
+                main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.back_to_zx_ui")}',
+                                     icon='textures/ui/refresh_light', on_click=self.back_to_menu)
                 main_form.on_close = self.back_to_menu
             else:
-                main_form.add_button(f'{ColorFormat.YELLOW}关闭', icon='textures/ui/cancel', on_click=None)
+                main_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "main_form.button.close")}',
+                                     icon='textures/ui/cancel', on_click=None)
                 main_form.on_close = None
             player.send_form(main_form)
 
-    def add_new_category(self, player: Player):
+    # Add a new shop category
+    def add_shop_category(self, player: Player) -> None:
         textinput1 = TextInput(
-            label=f'{ColorFormat.GREEN}输入商品分类名称...',
-            placeholder='请输入任意字符串, 但不能为空...'
+            label=f'{ColorFormat.GREEN}{self.get_text(player, "add_shop_category_form.textinput1.label")}',
+            placeholder=self.get_text(player, "add_shop_category_form.textinput1.placeholder")
         )
         textinput2 = TextInput(
-            label=f'{ColorFormat.GREEN}输入商品分类图标路径...',
-            placeholder='请输入材质路径或 url, 选填'
+            label=f'{ColorFormat.GREEN}{self.get_text(player, "add_shop_category_form.textinput2.label")}',
+            placeholder=self.get_text(player, "add_shop_category_form.textinput2.placeholder")
         )
-        add_new_category_form = ModalForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}添加新的商品分类',
+        add_shop_category_form = ModalForm(
+            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "add_shop_category_form.title")}',
             controls=[textinput1, textinput2],
             on_close=self.back_to_main_form,
-            submit_button=f'{ColorFormat.YELLOW}确认'
+            submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "add_shop_category_form.submit_button")}'
         )
-        def on_submit(player: Player, json_str):
+        def on_submit(player: Player, json_str: str):
             data = json.loads(json_str)
             if len(data[0]) == 0:
-                player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                 return
             already_exist_category_list = [key for key in self.shop_data.keys()]
             if data[0] in already_exist_category_list:
-                player.send_message(f'{ColorFormat.RED}添加商品分类失败： '
-                                    f'{ColorFormat.WHITE}重复的商品分类名...')
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "add_shop_category.message.fail")}: '
+                                    f'{ColorFormat.WHITE}'
+                                    + self.get_text(player, "add_shop_category.message.fail.reason").format(data[0]))
                 return
-            new_category_name = data[0]
-            new_category_icon = data[1]
-            self.shop_data[new_category_name] = {'category_icon': new_category_icon}
+            category_name = data[0]
+            category_icon = data[1]
+            self.shop_data[category_name] = {'category_icon': category_icon}
             self.save_shop_data()
-            player.send_message(f'{ColorFormat.YELLOW}添加商品分类成功...')
-        add_new_category_form.on_submit = on_submit
-        player.send_form(add_new_category_form)
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "add_shop_category.message.success")}')
+        add_shop_category_form.on_submit = on_submit
+        player.send_form(add_shop_category_form)
 
+    # Shop category
     def shop_category(self, category_name):
         def on_click(player: Player):
             player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
             shop_category_form = ActionForm(
                 title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{category_name}',
-                content=f'{ColorFormat.GREEN}余额： {ColorFormat.WHITE}{player_money}\n'
-                        f'{ColorFormat.GREEN}请选择操作...',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "your_money")}: '
+                        f'{ColorFormat.WHITE}{player_money}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "shop_category_form.content")}',
                 on_close=self.back_to_main_form
             )
-            if player.is_op == True:
-                shop_category_form.add_button(f'{ColorFormat.YELLOW}编辑该商品分类', icon='textures/ui/hammer_l', on_click=self.edit_shop_category(category_name))
+            if player.is_op:
+                shop_category_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "shop_category_form.button.edit_shop_category")}',
+                                              icon='textures/ui/hammer_l', on_click=self.edit_shop_category(category_name))
             for key, value in self.shop_data[category_name].items():
                 if key == 'category_icon':
                     continue
                 good_type = key
-                good_price = self.shop_data[category_name][good_type]['good_price']
-                good_name = self.shop_data[category_name][good_type]['good_name']
+                good_price = value['good_price']
+                good_name = value['good_name']
+                good_mode = value['good_mode']
+                collectors = value['collectors']
                 shop_category_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n'
-                                              f'{ColorFormat.GREEN}单价： {good_price}', on_click=self.good_info(category_name, good_type, good_name, good_price))
+                                              f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: {good_price}',
+                                              on_click=self.good(category_name, good_type, good_name, good_price, good_mode, collectors))
+            shop_category_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                          icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
             player.send_form(shop_category_form)
         return on_click
 
+    # Edit shop category
     def edit_shop_category(self, category_name):
         def on_click(player: Player):
             edit_shop_category_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}编辑 {category_name} 商品分类',
-                content=f'{ColorFormat.GREEN}请选择操作...',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "edit_shop_category_form.title")}',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "category_name")}: '
+                        f'{ColorFormat.WHITE}{category_name}\n\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "edit_shop_category_form.content")}',
                 on_close=self.back_to_main_form
             )
-            edit_shop_category_form.add_button(f'{ColorFormat.YELLOW}删除该商品分类', icon='textures/ui/cancel', on_click=self.delete_shop_category(category_name))
-            edit_shop_category_form.add_button(f'{ColorFormat.YELLOW}更新该商品分类', icon='textures/ui/refresh', on_click=self.update_shop_category(category_name))
-            edit_shop_category_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+            edit_shop_category_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "edit_shop_category_form.button.delete_shop_category")}',
+                                               icon='textures/ui/cancel', on_click=self.delete_shop_category(category_name))
+            edit_shop_category_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "edit_shop_category_form.button.update_shop_category")}',
+                                               icon='textures/ui/refresh', on_click=self.update_shop_category(category_name))
+            edit_shop_category_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                               icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
             player.send_form(edit_shop_category_form)
         return on_click
 
+    # Delete shop category
     def delete_shop_category(self, category_name):
         def on_click(player: Player):
             confirm_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}确认表单',
-                content=f'{ColorFormat.GREEN}你确定要删除 {ColorFormat.WHITE}{category_name} '
-                        f'{ColorFormat.GREEN}商品分类吗？\n'
-                        f'该商品分类下的所有配置将被清除, 包括商品...',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "delete_shop_category_form.title")}',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "category_name")}: '
+                        f'{ColorFormat.WHITE}{category_name}\n\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "delete_shop_category_form.content")}',
                 on_close=self.back_to_main_form
             )
-            confirm_form.add_button(f'{ColorFormat.YELLOW}确认', icon='textures/ui/realms_slot_check', on_click=self.on_confirm(category_name))
-            confirm_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+            confirm_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "delete_shop_category_form.button.confirm")}',
+                                    icon='textures/ui/realms_slot_check', on_click=self.delete_shop_category_confirm(category_name))
+            confirm_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                    icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
             player.send_form(confirm_form)
         return on_click
 
-    def on_confirm(self, category_name):
+    def delete_shop_category_confirm(self, category_name):
         def on_click(player: Player):
             self.shop_data.pop(category_name)
             self.save_shop_data()
-            player.send_message(f'{ColorFormat.YELLOW}商品分类删除成功...')
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "delete_shop_category.message.success")}')
         return on_click
 
+    # Update shop category
     def update_shop_category(self, category_name):
         def on_click(player: Player):
             textinput1 = TextInput(
-                label=f'{ColorFormat.GREEN}原商品分类名： {ColorFormat.WHITE}{category_name}\n'
-                      f'{ColorFormat.GREEN}输入新的商品分类名...\n'
-                      f'{ColorFormat.GREEN}（请输入任意字符串, 但不能留空...）',
-                placeholder='请输入任意字符串, 但不能留空...',
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "category_name")}: '
+                      f'{ColorFormat.WHITE}{category_name}\n\n'
+                      f'{ColorFormat.GREEN}{self.get_text(player, "update_shop_category_form.textinput1.label")}',
+                placeholder=self.get_text(player, "update_shop_category_form.textinput1.placeholder"),
                 default_value=category_name
             )
             textinput2 = TextInput(
-                label=f'{ColorFormat.GREEN}原商品分类图标路径： {ColorFormat.WHITE}{self.shop_data[category_name]["category_icon"]}\n'
-                      f'{ColorFormat.GREEN}输入新的商品分类图标路径...\n'
-                      f'（请输入材质路径或 url 或留空...）',
-                placeholder='请输入材质路径或 url 或留空...',
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "update_shop_category_form.textinput2.label")}',
+                placeholder=self.get_text(player, "update_shop_category_form.textinput1.placeholder"),
                 default_value=self.shop_data[category_name]['category_icon']
             )
             update_shop_category_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}更新 {category_name} 商品分类',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "update_shop_category_form.title")}',
                 controls=[textinput1, textinput2],
                 on_close=self.back_to_main_form,
-                submit_button=f'{ColorFormat.YELLOW}更新'
+                submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "update_shop_category_form.submit_button")}'
             )
-            def on_submit(player: Player, json_str):
+            def on_submit(player: Player, json_str: str):
                 data = json.loads(json_str)
-                # 判断 textinput1 是否被填写
                 if len(data[0]) == 0:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                    player.send_message(self.get_text(player, "message.type_error"))
                     return
                 update_category_name = data[0]
-                # 读取新的材质路径（无视留空, 留空将自动不显示图标）
+                category_list = [key for key in self.shop_data.keys() if key != category_name]
+                if update_category_name in category_list:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "update_shop_category.message.fail")}: {ColorFormat.WHITE}'
+                                        + self.get_text(player, "update_shop_category.message.fail.reason").format(update_category_name))
+                    return
                 update_category_icon = data[1]
-                # 更新分类
                 self.shop_data[update_category_name] = self.shop_data[category_name]
                 if update_category_name != category_name:
                     self.shop_data.pop(category_name)
                 self.shop_data[update_category_name]['category_icon'] = update_category_icon
                 self.save_shop_data()
-                player.send_message(f'{ColorFormat.YELLOW}商品分类更新成功...')
+                player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "update_shop_category.message.success")}')
             update_shop_category_form.on_submit = on_submit
             player.send_form(update_shop_category_form)
         return on_click
 
-    def good_info(self, category_name, good_type, good_name, good_price):
+    # Add good
+    @event_handler
+    def on_player_interact(self, event: PlayerInteractEvent):
+        if event.player.name in self.player_with_add_good_mode_list:
+            try:
+                good_type = event.item.type
+            except:
+                return
+            category_list = [key for key in self.shop_data.keys()]
+            dropdown1 = Dropdown(
+                label=f'{ColorFormat.GREEN}{self.get_text(event.player, "good_type")}: '
+                      f'{ColorFormat.WHITE}{good_type}\n\n'
+                      f'{ColorFormat.GREEN}{self.get_text(event.player, "add_good_form.dropdown1.label")}',
+                options=category_list
+            )
+            good_mode_list = ['purchase_and_reclaim', 'only_purchase', 'only_reclaim']
+            dropdown2 = Dropdown(
+                label=f'{ColorFormat.GREEN}{self.get_text(event.player, "add_good_form.dropdown2.label")}',
+                options=good_mode_list
+            )
+            textinput1 = TextInput(
+                label=f'{ColorFormat.GREEN}{self.get_text(event.player, "add_good_form.textinput1.label")}',
+                placeholder=self.get_text(event.player, "add_good_form.textinput1.placeholder")
+            )
+            textinput2 = TextInput(
+                label=f'{ColorFormat.GREEN}{self.get_text(event.player, "add_good_form.textinput2.label")}',
+                placeholder=self.get_text(event.player, "add_good_form.textinput2.placeholder")
+            )
+            add_good_form = ModalForm(
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(event.player, "add_good_form.title")}',
+                controls=[dropdown1, dropdown2, textinput1, textinput2],
+                submit_button=f'{ColorFormat.YELLOW}{self.get_text(event.player, "add_good_form.submit_button")}',
+                on_close=self.back_to_main_form
+            )
+            def on_submit(player: event.player, json_str: str):
+                data = json.loads(json_str)
+                category_name = category_list[data[0]]
+                good_type_belong_to_this_category_list = [key for key in self.shop_data[category_name].keys() if key != 'category_icon']
+                if good_type in good_type_belong_to_this_category_list:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "add_good.message.fail")}: '
+                                        f'{ColorFormat.WHITE}'
+                                        + self.get_text(player, "add_good.message.fail.reason").format(good_type))
+                    return
+                good_mode = good_mode_list[data[1]]
+                if len(data[2]) == 0:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
+                    return
+                else:
+                    good_name = data[2]
+                try:
+                    good_price = int(data[3])
+                except ValueError:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
+                    return
+                if good_price <= 0:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
+                    return
+                self.shop_data[category_name][good_type] = {
+                    'good_name': good_name,
+                    'good_price': good_price,
+                    'good_mode': good_mode,
+                    'collectors': []
+                }
+                self.save_shop_data()
+                player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "add_good.message.success")}')
+            add_good_form.on_submit = on_submit
+            event.player.send_form(add_good_form)
+            event.is_cancelled = True
+        else:
+            if not event.player.is_op:
+                if ((event.block.type == 'minecraft:mob_spawner' or event.block.type == 'minecraft:trial_spawner')
+                        and 'spawn_egg' in event.item.type):
+                    event.is_cancelled = True
+
+    # Good
+    def good(self, category_name, good_type, good_name, good_price, good_mode, collectors):
         def on_click(player: Player):
             player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
             reclaim_rate = self.config_data['reclaim_rate']
-            pre_good_reclaim_price = int(reclaim_rate * good_price)
-            if pre_good_reclaim_price == 0:
+            if int(reclaim_rate * good_price) == 0:
                 good_reclaim_price = good_price
             else:
-                good_reclaim_price = pre_good_reclaim_price
+                good_reclaim_price = int(reclaim_rate * good_price)
             good_info_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{good_name} 商品页面',
-                content=f'{ColorFormat.GREEN}余额： {ColorFormat.WHITE}{player_money}\n'
-                        f'{ColorFormat.GREEN}商品单价： {ColorFormat.WHITE}{good_price}\n'
-                        f'{ColorFormat.GREEN}商品回收单价： {ColorFormat.WHITE}{good_reclaim_price}',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_form.title")}',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "your_money")}: '
+                        f'{ColorFormat.WHITE}{player_money}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_type")}: '
+                        f'{ColorFormat.WHITE}{good_type}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_name")}: '
+                        f'{ColorFormat.WHITE}{good_name}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: '
+                        f'{ColorFormat.WHITE}{good_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "reclaim_price")}: '
+                        f'{ColorFormat.WHITE}{good_reclaim_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_mode")}: '
+                        f'{ColorFormat.WHITE}{good_mode}\n'
+                        f'{ColorFormat.GREEN}'
+                         + self.get_text(player, "good_form.content").format(len(collectors)),
                 on_close=self.back_to_main_form
             )
-            if player.is_op == True:
-                good_info_form.add_button(f'{ColorFormat.YELLOW}编辑该商品', icon='textures/ui/hammer_l', on_click=self.good_edit(category_name, good_type, good_name, good_price))
-            good_info_form.add_button(f'{ColorFormat.YELLOW}购买', icon='textures/ui/village_hero_effect', on_click=self.good_buy(good_type, good_name, good_price))
-            good_info_form.add_button(f'{ColorFormat.YELLOW}回收', icon='textures/ui/trade_icon', on_click=self.good_reclaim(good_type, good_name, good_reclaim_price))
-            if (self.good_collection_data[player.name].get(category_name) is None
-                    or self.good_collection_data[player.name][category_name].get(good_type) is None):
-                good_info_form.add_button(f'{ColorFormat.YELLOW}收藏', icon='textures/ui/heart_new', on_click=self.good_collect(category_name, good_type, good_name, good_price))
+            if player.is_op:
+                good_info_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "good_form.button.edit_good")}',
+                                          icon='textures/ui/hammer_l',
+                                          on_click=self.good_edit(category_name, good_type, good_name, good_price, good_reclaim_price, good_mode))
+            if good_mode == 'purchase_and_reclaim' or good_mode == 'only_purchase':
+                good_info_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "good_form.button.purchase")}',
+                                          icon='textures/ui/village_hero_effect', on_click=self.good_purchase(good_type, good_name, good_price))
+            if good_mode == 'purchase_and_reclaim' or good_mode == 'only_reclaim':
+                good_info_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "good_form.button.reclaim")}',
+                                          icon='textures/ui/trade_icon', on_click=self.good_reclaim(good_type, good_name, good_reclaim_price))
+            if player.name not in collectors:
+                good_info_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "good_form.button.collect_good")}',
+                                          icon='textures/ui/heart_new',
+                                          on_click=self.good_collect(category_name, good_type))
             else:
-                good_info_form.add_button(f'{ColorFormat.YELLOW}取消收藏', icon='textures/ui/heart_background', on_click=self.good_collect_cancel(category_name, good_type, good_name, good_price))
-            good_info_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+                good_info_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "good_form.button.cancel_collect_good")}',
+                                          icon='textures/ui/heart_background',
+                                          on_click=self.good_collect_cancel(category_name, good_type))
+            good_info_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                      icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
             player.send_form(good_info_form)
         return on_click
 
-    def good_buy(self, good_type, good_name, good_price):
+    # Edit good
+    def good_edit(self, category_name, good_type, good_name, good_price, good_reclaim_price, good_mode):
+        def on_click(player: Player):
+            good_edit_form = ActionForm(
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "edit_good_form.title")}',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "good_type")}: '
+                        f'{ColorFormat.WHITE}{good_type}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_name")}: '
+                        f'{ColorFormat.WHITE}{good_name}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: '
+                        f'{ColorFormat.WHITE}{good_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "reclaim_price")}: '
+                        f'{ColorFormat.WHITE}{good_reclaim_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_mode")}: '
+                        f'{ColorFormat.WHITE}{good_mode}\n\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "edit_good_form.content")}',
+                on_close=self.back_to_main_form
+            )
+            good_edit_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "edit_good_form.button.update_good")}',
+                                      icon='textures/ui/refresh',
+                                      on_click=self.good_update(category_name, good_type, good_name, good_price, good_reclaim_price, good_mode))
+            good_edit_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "edit_good_form.button.delete_good")}',
+                                      icon='textures/ui/cancel',
+                                      on_click=self.good_delete(category_name, good_type, good_name, good_price, good_reclaim_price, good_mode))
+            good_edit_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                      icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+            player.send_form(good_edit_form)
+        return on_click
+
+    # Update good
+    def good_update(self, category_name, good_type, good_name, good_price, good_reclaim_price, good_mode):
+        def on_click(player: Player):
+            textinput1 = TextInput(
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "good_type")}: '
+                        f'{ColorFormat.WHITE}{good_type}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_name")}: '
+                        f'{ColorFormat.WHITE}{good_name}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: '
+                        f'{ColorFormat.WHITE}{good_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "reclaim_price")}: '
+                        f'{ColorFormat.WHITE}{good_reclaim_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_mode")}: '
+                        f'{ColorFormat.WHITE}{good_mode}\n\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "update_good_form.textinput1.label")}',
+                placeholder=self.get_text(player, "update_good_form.textinput1.placeholder"),
+                default_value=good_name
+            )
+            textinput2 = TextInput(
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "update_good_form.textinput2.label")}',
+                placeholder=self.get_text(player, "update_good_form.textinput2.placeholder"),
+                default_value=f'{good_price}'
+            )
+            good_mode_list = ['purchase_and_reclaim', 'only_purchase', 'only_reclaim']
+            dropdown = Dropdown(
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "update_good_form.dropdown.label")}',
+                options=good_mode_list,
+                default_index=good_mode_list.index(good_mode)
+            )
+            good_update_form = ModalForm(
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "update_good_form.title")}',
+                controls=[textinput1, textinput2, dropdown],
+                on_close=self.back_to_main_form,
+                submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "update_good_form.submit_button")}'
+            )
+            def on_submit(player: Player, json_str: str):
+                data = json.loads(json_str)
+                if len(data[0]) == 0:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
+                    return
+                update_good_name = data[0]
+                try:
+                    update_good_price = int(data[1])
+                except ValueError:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
+                    return
+                if update_good_price <= 0:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
+                    return
+                update_good_mode = good_mode_list[data[2]]
+                self.shop_data[category_name][good_type]['good_name'] = update_good_name
+                self.shop_data[category_name][good_type]['good_price'] = update_good_price
+                self.shop_data[category_name][good_type]['good_mode'] = update_good_mode
+                self.save_shop_data()
+                player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "update_good.message.success")}')
+            good_update_form.on_submit = on_submit
+            player.send_form(good_update_form)
+        return on_click
+
+    # Delete good
+    def good_delete(self, category_name, good_type, good_name, good_price, good_reclaim_price, good_mode):
+        def on_click(player: Player):
+            confirm_form = ActionForm(
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "delte_good_form.title")}',
+                content=f'{ColorFormat.GREEN}{self.get_text(player, "good_type")}: '
+                        f'{ColorFormat.WHITE}{good_type}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_name")}: '
+                        f'{ColorFormat.WHITE}{good_name}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: '
+                        f'{ColorFormat.WHITE}{good_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "reclaim_price")}: '
+                        f'{ColorFormat.WHITE}{good_reclaim_price}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_mode")}: '
+                        f'{ColorFormat.WHITE}{good_mode}\n\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "delte_good_form.content")}',
+                on_close=self.back_to_main_form
+            )
+            confirm_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "delte_good_form.button.confirm")}',
+                                    icon='textures/ui/realms_slot_check', on_click=self.good_delete_confirm(category_name, good_type))
+            confirm_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                    icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+            player.send_form(confirm_form)
+        return on_click
+
+    def good_delete_confirm(self, category_name, good_type):
+        def on_click(player: Player):
+            self.shop_data[category_name].pop(good_type)
+            self.save_shop_data()
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "delte_good.message.success")}')
+        return on_click
+
+    # Good purchase
+    def good_purchase(self, good_type, good_name, good_price):
         def on_click(player: Player):
             player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
             textinput = TextInput(
-                label=f'{ColorFormat.GREEN}余额： {ColorFormat.WHITE}{player_money}\n'
-                      f'{ColorFormat.GREEN}输入购买数量...',
-                placeholder='请输入一个正整数, 例如： 20'
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "your_money")}: '
+                        f'{ColorFormat.WHITE}{player_money}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_type")}: '
+                        f'{ColorFormat.WHITE}{good_type}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_name")}: '
+                        f'{ColorFormat.WHITE}{good_name}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: '
+                        f'{ColorFormat.WHITE}{good_price}\n\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_purchase_form.textinput.label")}',
+                placeholder=self.get_text(player, "good_purchase_form.textinput.placeholder")
             )
             good_buy_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{good_name} 购买页面',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_purchase_form.title")}',
                 controls=[textinput],
-                submit_button=f'{ColorFormat.YELLOW}购买',
+                submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "good_purchase_form.submit_button")}',
                 on_close=self.back_to_main_form
             )
-            def on_submit(player: Player, json_str):
+            def on_submit(player: Player, json_str: str):
                 data = json.loads(json_str)
                 try:
-                    good_to_buy_amount = int(data[0])
-                except:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                    amount = int(data[0])
+                except ValueError:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                     return
-                if good_to_buy_amount < 0:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                if amount < 0:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                     return
-                good_to_buy_total_price = good_to_buy_amount * good_price
-                # 再次获取玩家经济
-                player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
-                if player_money < good_to_buy_total_price:
-                    player.send_message(f'{ColorFormat.RED}购买商品失败： {ColorFormat.WHITE}余额不足...')
+                total_price = amount * good_price
+                player_money_now = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
+                if player_money_now < total_price:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "good_purchase.message.fail")}: '
+                                        f'{ColorFormat.WHITE}{self.get_text(player, "good_purchase.message.fail")}')
                     return
                 if player.name.find(' ') != -1:
                     player_name = f'"{player.name}"'
                 else:
                     player_name = player.name
-                self.server.dispatch_command(self.CommandSenderWrapper,
-                                             f'give {player_name} {good_type} {good_to_buy_amount}')
-                # 向玩家播放村民肯定的声音
-                self.server.dispatch_command(self.CommandSenderWrapper,
+                self.server.dispatch_command(self.command_sender,
+                                             f'give {player_name} {good_type} {amount}')
+                # yes!!!
+                self.server.dispatch_command(self.command_sender,
                                              f'playsound mob.villager.yes {player_name}')
-                player.send_message(f'{ColorFormat.YELLOW}购买商品成功...')
-                self.server.plugin_manager.get_plugin('umoney').api_change_player_money(player.name, -good_to_buy_total_price)
+                player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "good_purchase.message.success")}')
+                self.server.plugin_manager.get_plugin('umoney').api_change_player_money(player.name, -total_price)
             good_buy_form.on_submit = on_submit
             player.send_form(good_buy_form)
         return on_click
 
+    # Good reclaim
     def good_reclaim(self, good_type, good_name, good_reclaim_price):
         def on_click(player: Player):
             player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
@@ -324,349 +599,245 @@ class ushop(Plugin):
                 else:
                     player_inventory.append(content.type)
             if good_type not in player_inventory:
-                player.send_message(f'{ColorFormat.RED}回收商品失败： {ColorFormat.WHITE}你的背包里没有目标回收商品...')
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "good_reclaim.message.fail")}: '
+                                    f'{ColorFormat.WHITE}{self.get_text(player, "good_reclaim.message.fail.reason")}')
                 return
             else:
-                player_has_this_good_amount = 0
-                good_index = 0
-                for player_good_type in player_inventory:
-                    if player_good_type == good_type:
-                        player_has_this_good_amount += player.inventory.get_item(good_index).amount
-                        good_index += 1
+                has_amount = 0
+                index = 0
+                for good_type_any in player_inventory:
+                    if good_type_any == good_type:
+                        has_amount += player.inventory.get_item(index).amount
+                        index += 1
                     else:
-                        good_index += 1
+                        index += 1
             textinput = TextInput(
-                label=f'{ColorFormat.GREEN}余额： {ColorFormat.WHITE}{player_money}\n'
-                      f'{ColorFormat.GREEN}你的背包里有 {ColorFormat.WHITE}{player_has_this_good_amount} '
-                      f'{ColorFormat.GREEN}个{good_name}\n'
-                      f'输入回收数量...',
-                placeholder=f'请输入一个正整数, 但不要超过 {player_has_this_good_amount}'
+                label=f'{ColorFormat.GREEN}{self.get_text(player, "your_money")}: '
+                        f'{ColorFormat.WHITE}{player_money}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_type")}: '
+                        f'{ColorFormat.WHITE}{good_type}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "good_name")}: '
+                        f'{ColorFormat.WHITE}{good_name}\n'
+                        f'{ColorFormat.GREEN}{self.get_text(player, "reclaim_price")}: '
+                        f'{ColorFormat.WHITE}{good_reclaim_price}\n\n'
+                        f'{ColorFormat.GREEN}'
+                        + self.get_text(player, "good_reclaim_form.textinput.label1").format(has_amount, good_name) + '\n'
+                        f'{self.get_text(player, "good_reclaim_form.textinput.label2")}',
+                placeholder=self.get_text(player, "good_reclaim_form.textinput.placeholder").format(has_amount)
             )
             good_reclaim_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{good_name} 回收页面',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_reclaim_form.title")}',
                 controls=[textinput],
-                submit_button=f'{ColorFormat.YELLOW}回收',
+                submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "good_reclaim_form.submit_button")}',
                 on_close=self.back_to_main_form
             )
-            def on_submit(player: Player, json_str):
+            def on_submit(player: Player, json_str: str):
                 data = json.loads(json_str)
                 try:
-                    good_to_reclaim_amount = int(data[0])
-                except:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                    amount = int(data[0])
+                except ValueError:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                     return
-                if good_to_reclaim_amount < 0 or good_to_reclaim_amount > player_has_this_good_amount:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                if amount < 0 or amount > has_amount:
+                    player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                     return
-                good_to_reclaim_total_price = good_to_reclaim_amount * good_reclaim_price
+                total_price = amount * good_reclaim_price
                 if player.name.find(' ') != -1:
                     player_name = f'"{player.name}"'
                 else:
                     player_name = player.name
-                self.server.dispatch_command(self.CommandSenderWrapper,
-                                             f'clear {player_name} {good_type} 0 {good_to_reclaim_amount}')
-                # 向玩家播放村民肯定的声音
-                self.server.dispatch_command(self.CommandSenderWrapper,
+                self.server.dispatch_command(self.command_sender,
+                                             f'clear {player_name} {good_type} 0 {amount}')
+                # yes!!!
+                self.server.dispatch_command(self.command_sender,
                                              f'playsound mob.villager.yes {player_name}')
-                player.send_message(f'{ColorFormat.YELLOW}回收商品成功...')
-                self.server.plugin_manager.get_plugin('umoney').api_change_player_money(player.name, good_to_reclaim_total_price)
+                player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "good_reclaim.message.success")}')
+                self.server.plugin_manager.get_plugin('umoney').api_change_player_money(player.name, total_price)
             good_reclaim_form.on_submit = on_submit
             player.send_form(good_reclaim_form)
         return on_click
 
-    def good_search(self, player: Player):
+    # Good search
+    def good_search(self, player: Player) -> None:
         textinput = TextInput(
-            label=f'{ColorFormat.GREEN}输入关键词...',
-            placeholder='请输入任意字符串...'
+            label=f'{ColorFormat.GREEN}{self.get_text(player, "good_search_form.textinput.label")}',
+            placeholder=self.get_text(player, "good_search_form.textinput.placeholder")
         )
         good_search_form = ModalForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}商品搜索',
+            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_search_form.title")}',
             controls=[textinput],
-            submit_button=f'{ColorFormat.YELLOW}搜索',
+            submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "good_search_form.submit_button")}',
             on_close=self.back_to_main_form
         )
-        def on_submit(player: Player, json_str):
+        def on_submit(player: Player, json_str: str):
             data = json.loads(json_str)
             if len(data[0]) == 0:
-                player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                 return
             keyword = data[0]
+            result_num = 0
             good_search_result_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}商品搜索结果',
+                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_search_result_form.title")}',
                 on_close=self.back_to_main_form
             )
-            for key, value in self.shop_data.items():
-                category_name = key
-                category_info = value
-                for key in category_info.keys():
+            for category_name, category_info in self.shop_data.items():
+                for key, value in category_info.items():
                     if key == 'category_icon':
                         continue
                     good_type = key
-                    good_name = self.shop_data[category_name][good_type]['good_name']
-                    good_price = self.shop_data[category_name][good_type]['good_price']
+                    good_name = value['good_name']
                     if keyword in good_name:
+                        result_num += 1
+                        good_price = value['good_price']
+                        good_mode = value['good_mode']
+                        collectors = value['collectors']
                         good_search_result_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n'
-                                                           f'{ColorFormat.GREEN}单价： {good_price}', on_click=self.good_info(category_name, good_type, good_name, good_price))
-            if len(good_search_result_form.buttons) == 0:
-                player.send_message(f'{ColorFormat.RED}无匹配结果...')
+                                                           f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: {good_price}',
+                                                           on_click=self.good(category_name, good_type, good_name, good_price, good_mode, collectors))
+
+            if result_num == 0:
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "good_search_result.message.fail")}')
             else:
-                good_search_result_form.content = f'{ColorFormat.GREEN}匹配到 {ColorFormat.WHITE}{len(good_search_result_form.buttons)} {ColorFormat.GREEN}个结果...'
+                good_search_result_form.content = ColorFormat.GREEN + self.get_text(player, "good_search_result.message.success").format(result_num)
                 player.send_form(good_search_result_form)
         good_search_form.on_submit = on_submit
         player.send_form(good_search_form)
 
-    def good_collect(self, category_name, good_type, good_name, good_price):
+    # Good collect
+    def good_collect(self, category_name, good_type):
         def on_click(player: Player):
-            if self.good_collection_data[player.name].get(category_name) is None:
-                self.good_collection_data[player.name][category_name] = {}
-            self.good_collection_data[player.name][category_name][good_type] = {
-                'good_name': good_name,
-                'good_price': good_price
-            }
-            self.save_good_collection_data()
-            player.send_message(f'{ColorFormat.YELLOW}收藏商品成功...')
+            self.shop_data[category_name][good_type]['collectors'].append(player.name)
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "good_collect.message.success")}')
         return on_click
 
-    def good_collect_cancel(self, category_name, good_type, good_name, good_price):
+    # Cancel the collections
+    def good_collect_cancel(self, category_name, good_type):
         def on_click(player: Player):
-            self.good_collection_data[player.name][category_name].pop(good_type)
-            if len(self.good_collection_data[player.name][category_name]) == 0:
-                self.good_collection_data[player.name].pop(category_name)
-            self.save_good_collection_data()
-            player.send_message(f'{ColorFormat.YELLOW}取消收藏商品成功...')
+            self.shop_data[category_name][good_type]['collectors'].remove(player.name)
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "good_collect_cancel.message.success")}')
         return on_click
 
-    def player_good_collection(self, player: Player):
-        player_good_collection_form = ActionForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}商品收藏',
-            content=f'{ColorFormat.GREEN}请选择操作...',
+    # Player's good collections
+    def good_collection(self, player: Player) -> None:
+        good_collection_form = ActionForm(
+            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_collection_form.title")}',
             on_close=self.back_to_main_form
         )
-        for key, value in self.good_collection_data[player.name].items():
-            category_name = key
-            for key, value in self.good_collection_data[player.name][category_name] .items():
+        for category_name, category_info in self.shop_data.items():
+            for key, value in category_info.items():
+                if key == 'category_icon':
+                    continue
                 good_type = key
-                good_name = value['good_name']
-                good_price = value['good_price']
-                player_good_collection_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n{ColorFormat.GREEN}单价： {good_price}',
-                                                       on_click=self.good_info(category_name, good_type, good_name, good_price))
-        player_good_collection_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
-        player.send_form(player_good_collection_form)
+                collectors = value['collectors']
+                if player.name in collectors:
+                    good_name = value['good_name']
+                    good_price = value['good_price']
+                    good_mode = value['good_mode']
+                    good_collection_form.add_button(f'{ColorFormat.YELLOW}{good_name}\n'
+                                                       f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: {good_price}',
+                                                       on_click=self.good(category_name, good_type, good_name,
+                                                                          good_price, good_mode, collectors))
+        num = len(good_collection_form.buttons)
+        if num == 0:
+            good_collection_form.content = f'{ColorFormat.GREEN}{self.get_text(player, "good_collection_form.content1")}'
+        else:
+            good_collection_form.content = ColorFormat.GREEN + self.get_text(player, "good_collection_form.content2").format(num)
+        good_collection_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                        icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+        player.send_form(good_collection_form)
 
-    def good_edit(self, category_name, good_type, good_name, good_price):
-        def on_click(player: Player):
-            good_edit_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}编辑商品 {good_name}',
-                content=f'{ColorFormat.GREEN}请选择操作...',
-                on_close=self.back_to_main_form
-            )
-            good_edit_form.add_button(f'{ColorFormat.YELLOW}更新该商品', icon='textures/ui/refresh', on_click=self.good_update(category_name, good_type, good_name, good_price))
-            good_edit_form.add_button(f'{ColorFormat.YELLOW}删除该商品', icon='textures/ui/cancel', on_click=self.good_delete(category_name, good_type, good_name))
-            good_edit_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
-            player.send_form(good_edit_form)
-        return on_click
-
-    def good_update(self, category_name, good_type, good_name, good_price):
-        def on_click(player: Player):
-            textinput1 = TextInput(
-                label=f'{ColorFormat.GREEN}原商品名： {ColorFormat.WHITE}{good_name}\n'
-                      f'{ColorFormat.GREEN}输入新的商品名...\n'
-                      f'{ColorFormat.GREEN}（请输入任意字符串, 但不能留空...）',
-                placeholder='请输入任意字符串, 但不能留空...',
-                default_value=good_name
-            )
-            textinput2 = TextInput(
-                label=f'{ColorFormat.GREEN}原商品价单价： {ColorFormat.WHITE}{good_price}\n'
-                      f'{ColorFormat.GREEN}输入新的商品单价...\n'
-                      f'{ColorFormat.GREEN}（请输入一个正整数, 例如： 5...）',
-                placeholder='请输入一个正整数, 例如： 5...',
-                default_value=f'{good_price}'
-            )
-            good_update_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}更新商品 {good_name}',
-                controls=[textinput1, textinput2],
-                on_close=self.back_to_main_form,
-                submit_button=f'{ColorFormat.YELLOW}更新'
-            )
-            def on_submit(player: Player, json_str):
-                data = json.loads(json_str)
-                # 判断 textinput1 是否被填写
-                if len(data[0]) == 0:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
-                    return
-                update_good_name = data[0]
-                # 判断 textinput2 是否填写了正确的数字类型
-                try:
-                    update_good_price = int(data[1])
-                except:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
-                    return
-                if update_good_price <= 0:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
-                    return
-                # 更新
-                self.shop_data[category_name][good_type]['good_name'] = update_good_name
-                self.shop_data[category_name][good_type]['good_price'] = update_good_price
-                self.save_shop_data()
-                player.send_message(f'{ColorFormat.YELLOW}更新商品成功...')
-            good_update_form.on_submit = on_submit
-            player.send_form(good_update_form)
-        return on_click
-
-    def good_delete(self, category_name, good_type, good_name):
-        def on_click(player: Player):
-            confirm_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}确认表单',
-                content=f'{ColorFormat.GREEN}你确定要删除商品 {ColorFormat.WHITE}{good_name} {ColorFormat.GREEN}吗？',
-                on_close=self.back_to_main_form
-            )
-            confirm_form.add_button(f'{ColorFormat.YELLOW}确认', icon='textures/ui/realms_slot_check', on_click=self.on_another_confirm(category_name, good_type))
-            confirm_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
-            player.send_form(confirm_form)
-        return on_click
-
-    def on_another_confirm(self, category_name, good_type):
-        def on_click(player: Player):
-            self.shop_data[category_name].pop(good_type)
-            self.save_shop_data()
-            player.send_message(f'{ColorFormat.YELLOW}删除商品成功...')
-        return on_click
-
-    def switch_to_add_good_mode(self, player: Player):
-        already_exist_category_list = [key for key in self.shop_data.keys()]
-        if len(already_exist_category_list) == 0 and player.name not in self.player_with_add_good_mode_list:
-            player.send_message(f'{ColorFormat.RED}开启添加商品模式失败： {ColorFormat.WHITE}你还没有创建任何商品分类...')
+    # Toggle on/off add good mode
+    def toggle_add_good_mode(self, player: Player) -> None:
+        category_list = [key for key in self.shop_data.keys()]
+        if len(category_list) == 0 and player.name not in self.player_with_add_good_mode_list:
+            player.send_message(f'{ColorFormat.RED}{self.get_text(player, "toggle_add_good_mode.message.fail")}: '
+                                f'{ColorFormat.WHITE}{self.get_text(player, "toggle_add_good_mode.message.fail.reason")}')
             return
         if player.name not in self.player_with_add_good_mode_list:
             self.player_with_add_good_mode_list.append(player.name)
-            player.send_message(f'{ColorFormat.YELLOW}已为你开启添加商品模式...')
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "toggle_add_good_mode.message.on.success")}')
         else:
             self.player_with_add_good_mode_list.remove(player.name)
-            player.send_message(f'{ColorFormat.YELLOW}已为你关闭添加商品模式...')
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "toggle_add_good_mode.message.off.success")}')
 
-    @event_handler
-    def on_player_interact(self, event: PlayerInteractEvent):
-        if event.player.name in self.player_with_add_good_mode_list:
-            try:
-                good_to_add = event.item.type
-            except:
-                return
-            already_exist_category_list = [key for key in self.shop_data.keys()]
-            dropdown = Dropdown(
-                label=f'{ColorFormat.GREEN}选择一个商品分类...',
-                options=already_exist_category_list
-            )
-            textinput1 = TextInput(
-                label=f'{ColorFormat.GREEN}输入商品名称...',
-                placeholder='请输入任意字符串, 但不能留空...'
-            )
-            textinput2 = TextInput(
-                label=f'{ColorFormat.GREEN}输入商品单价...',
-                placeholder='请输入一个正整数, 例如：5'
-            )
-            add_good_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}上架商品： {good_to_add}',
-                controls=[dropdown, textinput1, textinput2],
-                submit_button=f'{ColorFormat.YELLOW}上架',
-                on_close=self.back_to_main_form
-            )
-            def on_submit(player: event.player, json_str):
-                data = json.loads(json_str)
-                category_name = already_exist_category_list[data[0]]
-                good_belong_to_this_category_list = [key for key in self.shop_data[category_name].keys() if key != 'category_icon']
-                if good_to_add in good_belong_to_this_category_list:
-                    player.send_message(f'{ColorFormat.RED}上架商品失败： {ColorFormat.WHITE}重复的商品...')
-                    return
-                if len(data[1]) == 0:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
-                    return
-                else:
-                    good_name = data[1]
-                try:
-                    good_price = int(data[2])
-                except:
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
-                    return
-                if good_price <= 0 :
-                    player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
-                    return
-                self.shop_data[category_name][good_to_add] = {
-                    'good_name': good_name,
-                    'good_price': good_price
-                }
-                self.save_shop_data()
-                player.send_message(f'{ColorFormat.YELLOW}上架商品成功...')
-            add_good_form.on_submit = on_submit
-            event.player.send_form(add_good_form)
-            event.is_cancelled = True
-        else:
-            if event.player.is_op == False:
-                if ((event.block.type == 'minecraft:mob_spawner' or event.block.type == 'minecraft:trial_spawner')
-                        and 'spawn_egg' in event.item.type):
-                    event.is_cancelled = True
-
-    def reload_config_data(self, player: Player):
+    # Reload configurations
+    def reload_config_data(self, player: Player) -> None:
         reload_config_data_form = ActionForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}重载配置文件',
-            content=f'{ColorFormat.GREEN}清选择操作...',
+            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "reload_config_form.title")}',
+            content=f'{ColorFormat.GREEN}{self.get_text(player, "reload_config_form.content")}',
             on_close=self.back_to_main_form
         )
-        reload_config_data_form.add_button(f'{ColorFormat.YELLOW}重载商品回收价率', icon='textures/ui/refresh_light', on_click=self.reload_reclaim_rate)
-        reload_config_data_form.add_button(f'{ColorFormat.YELLOW}重载商店配置文件', icon='textures/ui/refresh_light', on_click=self.reload_shop_data)
-        reload_config_data_form.add_button(f'{ColorFormat.YELLOW}返回', icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
+        reload_config_data_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "reload_config_form.button.reload_global_config")}',
+                                           icon='textures/ui/icon_setting', on_click=self.reload_global_config_data)
+        reload_config_data_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "reload_config_form.button.reload_shop_data")}',
+                                           icon='textures/ui/icon_setting', on_click=self.reload_shop_data)
+        reload_config_data_form.add_button(f'{ColorFormat.YELLOW}{self.get_text(player, "button.back")}',
+                                           icon='textures/ui/refresh_light', on_click=self.back_to_main_form)
         player.send_form(reload_config_data_form)
 
-    def reload_reclaim_rate(self, player: Player):
-        current_reclaim_rate = self.config_data['reclaim_rate']
+    # Reload global configurations
+    def reload_global_config_data(self, player: Player) -> None:
+        reclaim_rate = self.config_data['reclaim_rate']
         textinput = TextInput(
-            label=f'{ColorFormat.GREEN}当前商品回收价率： {ColorFormat.WHITE}{current_reclaim_rate}\n'
-                  f'{ColorFormat.GREEN}输入新的商品回收价率...\n'
-                  f'{ColorFormat.GREEN}（请输入一个不大于1的正小数...）',
-            placeholder='请输入一个不大于1的正小数...',
-            default_value=f'{current_reclaim_rate}'
+            label=f'{ColorFormat.GREEN}{self.get_text(player, "reload_global_config_form.textinput.label")}: '
+                  f'{ColorFormat.WHITE}{reclaim_rate}',
+            placeholder=self.get_text(player, "reload_global_config_form.textinput.placeholder"),
+            default_value=f'{reclaim_rate}'
         )
         reload_reclaim_rate_form = ModalForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}重载配置文件',
+            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "reload_global_config_form.title")}',
             controls=[textinput],
-            submit_button=f'{ColorFormat.YELLOW}重载',
+            submit_button=f'{ColorFormat.YELLOW}{self.get_text(player, "reload_global_config_form.submit_button")}',
             on_close=self.back_to_main_form
         )
-        def on_submit(player: Player, json_str):
+        def on_submit(player: Player, json_str: str):
             data = json.loads(json_str)
-            # 判断 textinput 是否填写了正确的小数类型
             try:
                 update_reclaim_rate = float(data[0])
-            except:
-                player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+            except ValueError:
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                 return
             if update_reclaim_rate > 1 or update_reclaim_rate <= 0:
-                player.send_message(f'{ColorFormat.RED}表单解析错误, 请按提示正确填写...')
+                player.send_message(f'{ColorFormat.RED}{self.get_text(player, "message.type_error")}')
                 return
             self.config_data['reclaim_rate'] = update_reclaim_rate
             self.save_config_data()
-            player.send_message(f'{ColorFormat.YELLOW}重载商店回收价率成功...')
+            player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "reload_global_config.message.success")}')
         reload_reclaim_rate_form.on_submit = on_submit
         player.send_form(reload_reclaim_rate_form)
 
-    def reload_shop_data(self, player: Player):
+    # Reload shop data
+    def reload_shop_data(self, player: Player) -> None:
         with open(shop_data_file_path, 'r', encoding='utf-8') as f:
             self.shop_data = json.loads(f.read())
-        player.send_message(f'{ColorFormat.YELLOW}重载商店配置文件成功...')
+        player.send_message(f'{ColorFormat.YELLOW}{self.get_text(player, "reload_shop_data.message.success")}')
 
-    def save_shop_data(self):
+    # Save shop data
+    def save_shop_data(self) -> None:
         with open(shop_data_file_path, 'w+', encoding='utf-8') as f:
             json_str = json.dumps(self.shop_data, indent=4, ensure_ascii=False)
             f.write(json_str)
 
-    def save_good_collection_data(self):
-        with open(good_collection_data_file_path, 'w+', encoding='utf-8') as f:
-            json_str = json.dumps(self.good_collection_data, indent=4, ensure_ascii=False)
-            f.write(json_str)
-
-    def save_config_data(self):
+    # Save config data
+    def save_config_data(self) -> None:
         with open(config_data_file_path, 'w+', encoding='utf-8') as f:
             json_str = json.dumps(self.config_data, indent=4, ensure_ascii=False)
             f.write(json_str)
+
+    # Get text
+    def get_text(self, player: Player, text_key: str) -> str:
+        try:
+            lang = player.locale
+            if self.lang_data.get(lang) is None:
+                text_value = self.lang_data['en_US'][text_key]
+            else:
+                if self.lang_data[lang].get(text_key) is None:
+                    text_value = self.lang_data['en_US'][text_key]
+                else:
+                    text_value = self.lang_data[lang][text_key]
+            return text_value
+        except:
+            return text_key
 
     def back_to_main_form(self, player: Player):
         player.perform_command('us')
@@ -674,8 +845,4 @@ class ushop(Plugin):
     def back_to_menu(self, player: Player):
         player.perform_command('cd')
 
-    @event_handler
-    def on_player_join(self, event: PlayerJoinEvent):
-        if self.good_collection_data.get(event.player.name) is None:
-            self.good_collection_data[event.player.name] = {}
-            self.save_good_collection_data()
+
