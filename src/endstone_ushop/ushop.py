@@ -723,6 +723,7 @@ class ushop(Plugin):
             title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}{self.get_text(player, "good_collection_form.title")}',
             on_close=self.back_to_main_form
         )
+        num = 0
         for category_name, category_info in self.shop_data.items():
             for key, value in category_info.items():
                 if key == 'category_icon':
@@ -730,6 +731,7 @@ class ushop(Plugin):
                 good_type = key
                 collectors = value['collectors']
                 if player.name in collectors:
+                    num += 1
                     good_name = value['good_name']
                     good_price = value['good_price']
                     good_mode = value['good_mode']
@@ -737,7 +739,6 @@ class ushop(Plugin):
                                                        f'{ColorFormat.GREEN}{self.get_text(player, "purchase_price")}: {good_price}',
                                                        on_click=self.good(category_name, good_type, good_name,
                                                                           good_price, good_mode, collectors))
-        num = len(good_collection_form.buttons)
         if num == 0:
             good_collection_form.content = f'{ColorFormat.GREEN}{self.get_text(player, "good_collection_form.content1")}'
         else:
