@@ -8,7 +8,7 @@ from endstone.plugin import Plugin
 from endstone.inventory import ItemStack
 from endstone.command import Command, CommandSender, CommandSenderWrapper
 from endstone.form import ActionForm, ModalForm, Dropdown, TextInput
-from endstone.event import event_handler, PlayerInteractEvent
+from endstone.event import event_handler, PlayerInteractEvent, ServerCommandEvent
 
 from endstone_ushop.lang import load_langs
 from endstone_ushop.textures import load_textures
@@ -92,6 +92,11 @@ class ushop(Plugin):
             'description': 'Call out main form of UShop',
             'usages': ['/us'],
             'permissions': ['ushop.command.us']
+        },
+        'ustr': {
+            'description': 'Convert old shop data to brand new',
+            'usages': ['/ustr'],
+            'permissions': ['ushop.command.ustr']
         }
     }
 
@@ -99,10 +104,23 @@ class ushop(Plugin):
         'ushop.command.us': {
             'description': 'Call out main form of UShop',
             'default': True
+        },
+        'ushop.command.ustr': {
+            'description': 'Convert old shop data to brand new',
+            'default': True
         }
     }
 
     def on_command(self, sender: CommandSender, command: Command, args: list[str]) -> None:
+        if command.name == 'ustr':
+            if isinstance(sender, Player):
+                sender.send_message(
+                    f'{ColorFormat.RED}'
+                    f'This command can only be executed by console...'
+                )
+
+                return
+
         if command.name == 'us':
             if not isinstance(sender, Player):
                 sender.send_message(
@@ -2270,6 +2288,63 @@ class ushop(Plugin):
                     'spawn_egg' in event.item.type.id
             ):
                 event.cancel()
+
+    @event_handler
+    def on_server_command(self, event: ServerCommandEvent):
+        if event.command == '/ustr':
+            new_shop_data = {}
+
+            with open(shop_data_file_path, 'r', encoding='utf-8') as f:
+                old_shop_data = json.loads(f.read())
+
+            for old_shop_category in old_shop_data.keys():
+                new_shop_data[old_shop_category] = {}
+
+            for old_shop_category, old_shop_category_info in old_shop_data.items():
+                for key, value in old_shop_category_info.items():
+                    if key == 'category_icon':
+                        continue
+
+                    hash_object = hashlib.sha256(str(datetime.datetime.now()).encode())
+                    good_hex_dig = hash_object.hexdigest()
+
+                    print(good_hex_dig)
+
+                    good_type_id = key
+
+                    itemstack = ItemStack(
+                        type=good_type_id
+                    )
+
+                    good_type_translation_key = itemstack.type.translation_key
+
+                    good_purchase_price = value['good_price']
+
+                    good_reclaim_price = int(good_purchase_price * 0.5)
+
+                    good_mode = value['good_mode'].replace('_', ' ')
+
+                    collectors = value['collectors']
+
+                    new_shop_data[old_shop_category][good_hex_dig] = {
+                        'good_type_translation_key': good_type_translation_key,
+                        'good_type_id': good_type_id,
+                        'good_enchants': {},
+                        'good_lore': [],
+                        'good_purchase_price': good_purchase_price,
+                        'good_reclaim_price': good_reclaim_price,
+                        'good_mode': good_mode,
+                        'collectors': collectors
+                    }
+
+            self.shop_data = new_shop_data
+
+            self.save_shop_data()
+
+            self.logger.info(
+                f'{ColorFormat.YELLOW}'
+                f'All done! Enjoy your new journey...'
+            )
 
     # Get text
     def get_text(self, player: Player, text_key: str) -> str:
