@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "endstone-ushop"
-version = "250511"
-description = "Null"
+version = "250709"
+description = "A powerful shop system plug-in for endstone server..."
 
 [project.entry-points."endstone"]
 ushop = "endstone_ushop:ushop"
