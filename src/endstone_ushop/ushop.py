@@ -10,7 +10,7 @@ from endstone.command import Command, CommandSender, CommandSenderWrapper
 from endstone.form import ActionForm, ModalForm, Dropdown, TextInput
 from endstone.event import event_handler, PlayerInteractEvent, ServerCommandEvent
 
-from endstone_ushop.lang import load_langs
+from endstone_ushop.lang import load_lang
 from endstone_ushop.textures import load_textures
 
 current_dir = os.getcwd()
@@ -24,10 +24,10 @@ shop_data_file_path = os.path.join(first_dir, 'shop.json')
 
 config_data_file_path = os.path.join(first_dir, 'config.json')
 
-langs_dir = os.path.join(first_dir, 'langs')
+lang_dir = os.path.join(first_dir, 'lang')
 
-if not os.path.exists(langs_dir):
-    os.mkdir(langs_dir)
+if not os.path.exists(lang_dir):
+    os.mkdir(lang_dir)
 
 
 class ushop(Plugin):
@@ -61,7 +61,7 @@ class ushop(Plugin):
         self.config_data = config_data
 
         # Load langs
-        self.langs = load_langs(langs_dir)
+        self.langs = load_lang(lang_dir)
 
         # Load textures
         self.textures = load_textures()

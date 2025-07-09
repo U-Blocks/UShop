@@ -2,7 +2,7 @@ import os
 import json
 
 
-def load_langs(langs_dir: str) -> dict:
+def load_lang(langs_dir: str) -> dict:
     zh_CN_file_path = os.path.join(langs_dir, 'zh_CN.json')
     en_US_file_path = os.path.join(langs_dir, 'en_US.json')
 
@@ -380,7 +380,7 @@ def load_langs(langs_dir: str) -> dict:
             json_str = json.dumps(en_US, indent=4, ensure_ascii=False)
             f.write(json_str)
 
-    langs = {}
+    lang_data = {}
 
     for lang in os.listdir(langs_dir):
         lang_name = lang.strip('.json')
@@ -388,6 +388,6 @@ def load_langs(langs_dir: str) -> dict:
         lang_file_path = os.path.join(langs_dir, lang)
 
         with open(lang_file_path, 'r', encoding='utf-8') as f:
-            langs[lang_name] = json.loads(f.read())
+            lang_data[lang_name] = json.loads(f.read())
 
-    return langs
+    return lang_data
