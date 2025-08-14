@@ -69,14 +69,43 @@ class ushop(Plugin):
         self.good_enchant_translation_keys = {}
 
     def on_enable(self):
-        # Check whether pre-plugin UMoney is installed.
-        if self.server.plugin_manager.get_plugin('umoney') is None:
+        is_umoney_installed = self.server.plugin_manager.get_plugin('umoney')
+
+        is_arc_core_installed = self.server.plugin_manager.get_plugin('arc_core')
+
+        # Check whether pre-plugin UMoney or the arc core is installed.
+        if not (is_umoney_installed or is_arc_core_installed):
             self.logger.error(
                 f'{ColorFormat.RED}'
-                f'Pre-plugin UMoney is required...'
+                f'Pre-plugin UMoney or arc_core is required...'
             )
 
             self.server.plugin_manager.disable_plugin(self)
+
+            return
+
+        # Choose economy core
+        if is_umoney_installed and not is_arc_core_installed:
+            self.logger.info(
+                f'{ColorFormat.YELLOW}'
+                f'UShop will use UMoney as economy core...'
+            )
+
+            self.economy_core = 'umoney'
+        elif not is_umoney_installed and is_arc_core_installed:
+            self.logger.info(
+                f'{ColorFormat.YELLOW}'
+                f'UShop will use relevant function of arc_core as economy core...'
+            )
+
+            self.economy_core = 'arc_core'
+        else:
+            self.logger.info(
+                f'{ColorFormat.YELLOW}'
+                f'UMoney and arc_core are all be detected, UShop will first use relevant function of arc_core as economy core...'
+            )
+
+            self.economy_core = 'arc_core'
 
         self.command_sender = CommandSenderWrapper(
             self.server.command_sender,
@@ -122,7 +151,7 @@ class ushop(Plugin):
 
             player = sender
 
-            player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
+            player_money = self.server.plugin_manager.get_plugin(self.economy_core).api_get_player_money(player.name)
 
             main_form = ActionForm(
                 title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
@@ -184,7 +213,7 @@ class ushop(Plugin):
 
     # Official shop: main form
     def official_shop(self, player: Player):
-        player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
+        player_money = self.server.plugin_manager.get_plugin(self.economy_core).api_get_player_money(player.name)
 
         official_shop_form = ActionForm(
             title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
@@ -321,7 +350,7 @@ class ushop(Plugin):
     # Official shop: single shop category
     def official_shop_single_shop_category(self, shop_category):
         def on_click(player: Player):
-            player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
+            player_money = self.server.plugin_manager.get_plugin(self.economy_core).api_get_player_money(player.name)
 
             official_shop_single_shop_category_form = ActionForm(
                 title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
@@ -848,7 +877,7 @@ class ushop(Plugin):
     # Official shop: single good
     def official_shop_single_good(self, shop_category, good_hex_dig, good_name, good_type_id, good_enchants, good_lore, good_purchase_price, good_reclaim_price, good_mode, collectors):
         def on_click(player: Player):
-            player_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(player.name)
+            player_money = self.server.plugin_manager.get_plugin(self.economy_core).api_get_player_money(player.name)
 
             good_enchants_display = '\n'
 
@@ -1346,7 +1375,7 @@ class ushop(Plugin):
 
                 good_purchase_total_price = good_purchase_price * good_purchase_num
 
-                p_money = self.server.plugin_manager.get_plugin('umoney').api_get_player_money(p.name)
+                p_money = self.server.plugin_manager.get_plugin(self.economy_core).api_get_player_money(p.name)
 
                 if p_money < good_purchase_total_price:
                     p.send_message(
@@ -1363,7 +1392,7 @@ class ushop(Plugin):
                     f'{self.get_text(p, "official_shop_purchase_single_good.message.success")}'
                 )
 
-                self.server.plugin_manager.get_plugin('umoney').api_change_player_money(p.name, -good_purchase_total_price)
+                self.server.plugin_manager.get_plugin(self.economy_core).api_change_player_money(p.name, -good_purchase_total_price)
 
                 for i in range(36):
                     if good_purchase_num == 0:
@@ -1417,7 +1446,7 @@ class ushop(Plugin):
                         self.get_text(p, "official_shop_purchase_single_good.message").format(good_purchase_num)
                     )
 
-                    self.server.plugin_manager.get_plugin('umoney').api_change_player_money(p.name, money_to_refund)
+                    self.server.plugin_manager.get_plugin(self.economy_core).api_change_player_money(p.name, money_to_refund)
 
             official_shop_purchase_single_good_form.on_submit = on_submit
 
@@ -1527,7 +1556,7 @@ class ushop(Plugin):
                     f'{self.get_text(p, "official_shop_reclaim_single_good.message.success")}'
                 )
 
-                self.server.plugin_manager.get_plugin('umoney').api_change_player_money(p.name, good_reclaim_total_price)
+                self.server.plugin_manager.get_plugin(self.economy_core).api_change_player_money(p.name, good_reclaim_total_price)
 
                 for i in range(36):
                     if good_reclaim_num == 0:
