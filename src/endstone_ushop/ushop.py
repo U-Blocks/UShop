@@ -31,7 +31,7 @@ if not os.path.exists(lang_dir):
 
 
 class ushop(Plugin):
-    api_version = '0.9'
+    api_version = '0.10'
 
     def __init__(self):
         super().__init__()
@@ -92,21 +92,12 @@ class ushop(Plugin):
             'description': 'Call out main form of UShop',
             'usages': ['/us'],
             'permissions': ['ushop.command.us']
-        },
-        'ustr': {
-            'description': 'Convert old shop data to brand new',
-            'usages': ['/ustr'],
-            'permissions': ['ushop.command.ustr']
         }
     }
 
     permissions = {
         'ushop.command.us': {
             'description': 'Call out main form of UShop',
-            'default': True
-        },
-        'ushop.command.ustr': {
-            'description': 'Convert old shop data to brand new',
             'default': True
         }
     }
@@ -170,7 +161,7 @@ class ushop(Plugin):
                     on_click=self.reload_config_r
                 )
 
-            if self.server.plugin_manager.get_plugin('ZX_UI') is not None:
+            if self.server.plugin_manager.get_plugin('zx_ui') is not None:
                 main_form.on_close = self.back_to_menu
 
                 main_form.add_button(
@@ -369,7 +360,7 @@ class ushop(Plugin):
                 f'{ColorFormat.YELLOW}'
                 f'{self.get_text(player, "button.back")}',
                 icon='textures/ui/refresh_light',
-                on_click=self.back_to_main_form
+                on_click=self.official_shop
             )
 
             for good_hex_dig, good_info in self.shop_data[shop_category].items():
@@ -2278,73 +2269,15 @@ class ushop(Plugin):
     @event_handler
     def on_player_interact(self, event: PlayerInteractEvent):
         if not event.player.is_op:
-            if (
-                    (
-                        event.block.type == 'minecraft:mob_spawner'
-                        or
-                        event.block.type == 'minecraft:trial_spawner'
-                    )
-                    and
-                    'spawn_egg' in event.item.type.id
-            ):
-                event.cancel()
-
-    @event_handler
-    def on_server_command(self, event: ServerCommandEvent):
-        if event.command == '/ustr':
-            new_shop_data = {}
-
-            with open(shop_data_file_path, 'r', encoding='utf-8') as f:
-                old_shop_data = json.loads(f.read())
-
-            for old_shop_category in old_shop_data.keys():
-                new_shop_data[old_shop_category] = {}
-
-            for old_shop_category, old_shop_category_info in old_shop_data.items():
-                for key, value in old_shop_category_info.items():
-                    if key == 'category_icon':
-                        continue
-
-                    hash_object = hashlib.sha256(str(datetime.datetime.now()).encode())
-                    good_hex_dig = hash_object.hexdigest()
-
-                    print(good_hex_dig)
-
-                    good_type_id = key
-
-                    itemstack = ItemStack(
-                        type=good_type_id
-                    )
-
-                    good_type_translation_key = itemstack.type.translation_key
-
-                    good_purchase_price = value['good_price']
-
-                    good_reclaim_price = int(good_purchase_price * 0.5)
-
-                    good_mode = value['good_mode'].replace('_', ' ')
-
-                    collectors = value['collectors']
-
-                    new_shop_data[old_shop_category][good_hex_dig] = {
-                        'good_type_translation_key': good_type_translation_key,
-                        'good_type_id': good_type_id,
-                        'good_enchants': {},
-                        'good_lore': [],
-                        'good_purchase_price': good_purchase_price,
-                        'good_reclaim_price': good_reclaim_price,
-                        'good_mode': good_mode,
-                        'collectors': collectors
-                    }
-
-            self.shop_data = new_shop_data
-
-            self.save_shop_data()
-
-            self.logger.info(
-                f'{ColorFormat.YELLOW}'
-                f'All done! Enjoy your new journey...'
-            )
+            if event.action.name == 'RIGHT_CLICK_BLOCK':
+                if (
+                    event.block.type == 'minecraft:mob_spawner'
+                    or
+                    event.block.type == 'minecraft:trial_spawner'
+                ):
+                    if event.has_item:
+                        if 'spawn_egg' in event.item.type.id:
+                            event.cancel()
 
     # Get text
     def get_text(self, player: Player, text_key: str) -> str:
