@@ -8,9 +8,9 @@ from endstone.plugin import Plugin
 from endstone.inventory import ItemStack
 from endstone.command import Command, CommandSender, CommandSenderWrapper
 from endstone.form import ActionForm, ModalForm, Dropdown, TextInput
-from endstone.event import event_handler, PlayerInteractEvent, ServerCommandEvent
+from endstone.event import event_handler, PlayerInteractEvent
 
-from endstone_ushop.lang import load_lang
+from endstone_ushop.lang import load_lang_data
 from endstone_ushop.textures import load_textures
 
 current_dir = os.getcwd()
@@ -61,7 +61,7 @@ class ushop(Plugin):
         self.config_data = config_data
 
         # Load langs
-        self.langs = load_lang(lang_dir)
+        self.lang_data = load_lang_data(lang_dir)
 
         # Load textures
         self.textures = load_textures()
@@ -132,16 +132,7 @@ class ushop(Plugin):
     }
 
     def on_command(self, sender: CommandSender, command: Command, args: list[str]) -> None:
-        if command.name == 'ustr':
-            if isinstance(sender, Player):
-                sender.send_message(
-                    f'{ColorFormat.RED}'
-                    f'This command can only be executed by console...'
-                )
-
-                return
-
-        if command.name == 'us':
+        if command.name == 'us' or command.name == 'US':
             if not isinstance(sender, Player):
                 sender.send_message(
                     f'{ColorFormat.RED}'
@@ -246,12 +237,13 @@ class ushop(Plugin):
             )
 
             # Button - Official shop: add lore for item(s)
-            official_shop_form.add_button(
-                f'{ColorFormat.YELLOW}'
-                f'{self.get_text(player, "official_shop_main_form.add_lore")}',
-                icon='textures/ui/color_plus',
-                on_click=self.official_shop_add_lore
-            )
+            if self.server.plugin_manager.get_plugin('ulore') is not None:
+                official_shop_form.add_button(
+                    f'{ColorFormat.YELLOW}'
+                    f'{self.get_text(player, "official_shop_main_form.add_lore")}',
+                    icon='textures/ui/color_plus',
+                    on_click=self.server.plugin_manager.get_plugin('ulore').add_lore
+                )
 
         # Button - Official shop: good collections
         official_shop_form.add_button(
@@ -1609,334 +1601,6 @@ class ushop(Plugin):
 
         return on_click
 
-    # Official shop: add lore for item(s)
-    def official_shop_add_lore(self, player: Player):
-        if player.inventory.item_in_main_hand is None:
-            player.send_message(
-                f'{ColorFormat.RED}'
-                f'{self.get_text(player, "official_shop_add_lore.message.fail")}: '
-                f'{ColorFormat.WHITE}'
-                f'{self.get_text(player, "official_shop_add_lore.message.fail.reason")}'
-            )
-
-            return
-
-        itemstack = player.inventory.item_in_main_hand
-
-        item_amount = itemstack.amount
-
-        item_type_id = itemstack.type.id
-
-        item_type_translation_key = itemstack.type.translation_key
-
-        item_name = self.server.language.translate(
-            item_type_translation_key,
-            None,
-            player.locale
-        )
-
-        item_enchants = itemstack.item_meta.enchants
-
-        item_enchants_display = '\n'
-
-        for item_enchant_key, item_enchant_level in item_enchants.items():
-            item_enchant_translation_key = self.get_enchant_translation_key(item_enchant_key)
-
-            item_enchant_name = self.server.language.translate(
-                item_enchant_translation_key,
-                None,
-                player.locale
-            )
-
-            item_enchants_display += f'{item_enchant_name} [lvl {item_enchant_level}]\n'
-
-        if itemstack.item_meta.has_lore:
-            item_lore = itemstack.item_meta.lore
-        else:
-            item_lore = []
-
-        item_lore_display = '\n'
-
-        if item_lore:
-            for il in item_lore:
-                item_lore_display += f'{il}\n'
-
-        official_shop_add_lore_form = ActionForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
-                  f'{self.get_text(player, "official_shop_add_lore_form.title")}',
-            content=f'{ColorFormat.GREEN}'
-                    f'{self.get_text(player, "item_name")}: '
-                    f'{ColorFormat.WHITE}'
-                    f'{item_name}\n'
-                    f'\n'
-                    f'{ColorFormat.GREEN}'
-                    f'{self.get_text(player, "item_type")}: '
-                    f'{ColorFormat.WHITE}'
-                    f'{item_type_id}\n'
-                    f'\n'
-                    f'{ColorFormat.GREEN}'
-                    f'{self.get_text(player, "item_enchants")}: '
-                    f'{ColorFormat.WHITE}'
-                    f'{item_enchants_display}'
-                    f'{ColorFormat.GREEN}'
-                    f'{self.get_text(player, "item_lore")}: '
-                    f'{ColorFormat.WHITE}'
-                    f'{item_lore_display}'
-                    f'\n'
-                    f'{ColorFormat.GREEN}'
-                    f'{self.get_text(player, "official_shop_add_lore_form.content")}',
-            on_close=self.official_shop
-        )
-
-        official_shop_add_lore_form.add_button(
-            f'{ColorFormat.YELLOW}'
-            f'{self.get_text(player, "official_shop_add_lore_form.button.add_new_lore_text")}',
-            icon='textures/ui/color_plus',
-            on_click=self.official_shop_add_new_lore_text(
-                item_name,
-                item_amount,
-                item_type_id,
-                item_enchants,
-                item_lore
-            )
-        )
-
-        il_index = 0
-
-        for il in item_lore:
-            official_shop_add_lore_form.add_button(
-                il,
-                icon='textures/items/name_tag',
-                on_click=self.official_shop_edit_single_lore_text(
-                    item_amount,
-                    item_type_id,
-                    item_enchants,
-                    item_lore,
-                    il,
-                    il_index
-                )
-            )
-
-            il_index += 1
-
-        player.send_form(official_shop_add_lore_form)
-
-    def official_shop_add_new_lore_text(self, item_name, item_amount, item_type_id, item_enchants, item_lore):
-        def on_click(player: Player):
-            textinput = TextInput(
-                label=f'{ColorFormat.GREEN}'
-                      f'{self.get_text(player, "item_name")}: '
-                      f'{ColorFormat.WHITE}'
-                      f'{item_name}\n'
-                      f'\n'
-                      f'{ColorFormat.GREEN}'
-                      f'{self.get_text(player, "official_shop_add_new_lore_text_form.textinput.label")}',
-                placeholder=self.get_text(player, "official_shop_add_new_lore_text_form.textinput.placeholder")
-            )
-
-            official_shop_add_new_lore_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
-                      f'{self.get_text(player, "official_shop_add_new_lore_text_form.title")}',
-                controls=[textinput],
-                submit_button=f'{ColorFormat.YELLOW}'
-                              f'{self.get_text(player, "official_shop_add_new_lore_text_form.submit_button")}',
-                on_close=self.official_shop_add_lore
-            )
-
-            def on_submit(p: Player, json_str: str):
-                data = json.loads(json_str)
-
-                if len(data[0]) == 0:
-                    player.send_message(
-                        f'{ColorFormat.RED}'
-                        f'{self.get_text(player, "message.type_error")}'
-                    )
-
-                    return
-
-                new_lore_text = data[0]
-
-                item_lore.append(new_lore_text)
-
-                itemstack = ItemStack(
-                    type=item_type_id,
-                    amount=item_amount
-                )
-
-                itemmeta_copy = itemstack.item_meta
-
-                if item_enchants:
-                    for item_enchant_key, item_enchant_level in item_enchants.items():
-                        itemmeta_copy.add_enchant(
-                            id=item_enchant_key,
-                            level=item_enchant_level
-                        )
-
-                itemmeta_copy.lore = item_lore
-
-                itemstack.set_item_meta(itemmeta_copy)
-
-                player.inventory.item_in_main_hand = None
-
-                player.inventory.item_in_main_hand = itemstack
-
-                self.official_shop_add_lore(p)
-
-            official_shop_add_new_lore_form.on_submit = on_submit
-
-            player.send_form(official_shop_add_new_lore_form)
-
-        return on_click
-
-    def official_shop_edit_single_lore_text(self, item_amount, item_type_id, item_enchants, item_lore, lore_text, lore_index):
-        def on_click(player: Player):
-            official_shop_edit_single_lore_text_form = ActionForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
-                      f'{self.get_text(player, "official_shop_single_lore_text_form.title")}',
-                content=f'{ColorFormat.GREEN}'
-                        f'{self.get_text(player, "lore_text")}: '
-                        f'{ColorFormat.WHITE}'
-                        f'{lore_text}\n'
-                        f'\n'
-                        f'{ColorFormat.GREEN}'
-                        f'{self.get_text(player, "official_shop_single_lore_text_form.content")}',
-                on_close=self.official_shop_add_lore
-            )
-
-            # Delete single lore text
-            official_shop_edit_single_lore_text_form.add_button(
-                f'{ColorFormat.YELLOW}'
-                f'{self.get_text(player, "official_shop_single_lore_text_form.button.delete_lore_text")}',
-                icon='textures/ui/icon_trash',
-                on_click=self.official_shop_delete_single_lore_text(
-                    item_amount,
-                    item_type_id,
-                    item_enchants,
-                    item_lore,
-                    lore_index
-                )
-            )
-
-            # Update single lore text
-            official_shop_edit_single_lore_text_form.add_button(
-                f'{ColorFormat.YELLOW}'
-                f'{self.get_text(player, "official_shop_single_lore_text_form.button.update_lore_text")}',
-                icon='textures/ui/refresh',
-                on_click=self.official_shop_update_single_lore_text(
-                    item_amount,
-                    item_type_id,
-                    item_enchants,
-                    item_lore,
-                    lore_index
-                )
-            )
-
-            official_shop_edit_single_lore_text_form.add_button(
-                f'{ColorFormat.YELLOW}'
-                f'{self.get_text(player, "button.back")}',
-                icon='textures/ui/refresh_light',
-                on_click=self.official_shop_add_lore
-            )
-
-            player.send_form(official_shop_edit_single_lore_text_form)
-
-        return on_click
-
-    def official_shop_delete_single_lore_text(self, item_amount, item_type_id, item_enchants, item_lore, lore_index):
-        def on_click(player: Player):
-            item_lore.pop(lore_index)
-
-            itemstack = ItemStack(
-                type=item_type_id,
-                amount=item_amount
-            )
-
-            itemmeta_copy = itemstack.item_meta
-
-            if item_enchants:
-                for item_enchant_key, item_enchant_level in item_enchants.items():
-                    itemmeta_copy.add_enchant(
-                        id=item_enchant_key,
-                        level=item_enchant_level
-                    )
-
-            itemmeta_copy.lore = item_lore
-
-            itemstack.set_item_meta(itemmeta_copy)
-
-            player.inventory.item_in_main_hand = None
-
-            player.inventory.item_in_main_hand = itemstack
-
-            self.official_shop_add_lore(player)
-
-        return on_click
-
-    def official_shop_update_single_lore_text(self, item_amount, item_type_id, item_enchants, item_lore, lore_index):
-        def on_click(player: Player):
-            textinput = TextInput(
-                label=f'{ColorFormat.GREEN}'
-                      f'{self.get_text(player, "official_shop_update_single_lore_text_form.textinput.label")}',
-                placeholder=self.get_text(player, "official_shop_update_single_lore_text_form.textinput.placeholder"),
-                default_value=item_lore[lore_index]
-            )
-
-            official_shop_update_single_lore_text_form = ModalForm(
-                title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
-                      f'{self.get_text(player, "official_shop_update_single_lore_text_form.title")}',
-                controls=[textinput],
-                submit_button=f'{ColorFormat.YELLOW}'
-                              f'{self.get_text(player, "official_shop_update_single_lore_text_form.submit_button")}',
-                on_close=self.official_shop_add_good
-            )
-
-            def on_submit(p: Player, json_str: str):
-                data = json.loads(json_str)
-
-                if len(data[0]) == 0:
-                    p.send_message(
-                        f'{ColorFormat.RED}'
-                        f'{self.get_text(p, "message.type_error")}'
-                    )
-
-                    return
-
-                update_lore_text = data[0]
-
-                item_lore.pop(lore_index)
-
-                item_lore.insert(lore_index, update_lore_text)
-
-                itemstack = ItemStack(
-                    type=item_type_id,
-                    amount=item_amount
-                )
-
-                itemmeta_copy = itemstack.item_meta
-
-                if item_enchants:
-                    for item_enchant_key, item_enchant_level in item_enchants.items():
-                        itemmeta_copy.add_enchant(
-                            id=item_enchant_key,
-                            level=item_enchant_level
-                        )
-
-                itemmeta_copy.lore = item_lore
-
-                itemstack.set_item_meta(itemmeta_copy)
-
-                p.inventory.item_in_main_hand = None
-
-                p.inventory.item_in_main_hand = itemstack
-
-                self.official_shop_add_lore(p)
-
-            official_shop_update_single_lore_text_form.on_submit = on_submit
-
-            player.send_form(official_shop_update_single_lore_text_form)
-
-        return on_click
-
     # Official shop: collect single good
     def official_shop_collect_single_good(self, shop_category, good_hex_dig):
         def on_click(player: Player):
@@ -2313,13 +1977,13 @@ class ushop(Plugin):
         player_lang = player.locale
 
         try:
-            if self.langs.get(player_lang) is None:
-                text_value = self.langs['en_US'][text_key]
+            if self.lang_data.get(player_lang) is None:
+                text_value = self.lang_data['en_US'][text_key]
             else:
-                if self.langs[player_lang].get(text_key) is None:
-                    text_value = self.langs['en_US'][text_key]
+                if self.lang_data[player_lang].get(text_key) is None:
+                    text_value = self.lang_data['en_US'][text_key]
                 else:
-                    text_value = self.langs[player_lang][text_key]
+                    text_value = self.lang_data[player_lang][text_key]
 
             return text_value
         except Exception as e:

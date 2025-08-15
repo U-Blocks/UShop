@@ -2,9 +2,9 @@ import os
 import json
 
 
-def load_lang(langs_dir: str) -> dict:
-    zh_CN_file_path = os.path.join(langs_dir, 'zh_CN.json')
-    en_US_file_path = os.path.join(langs_dir, 'en_US.json')
+def load_lang_data(lang_dir: str) -> dict:
+    zh_CN_file_path = os.path.join(lang_dir, 'zh_CN.json')
+    en_US_file_path = os.path.join(lang_dir, 'en_US.json')
 
     if not os.path.exists(zh_CN_file_path):
         with open(zh_CN_file_path, 'w', encoding='utf-8') as f:
@@ -29,15 +29,8 @@ def load_lang(langs_dir: str) -> dict:
                 'only reclaim': '仅回收',
                 'purchase and reclaim': '购买和回收',
 
-                'item_name': '物品名称',
-                'item_type': '物品类型',
-                'item_enchants': '物品附魔',
-                'item_lore': '物品特殊标签',
-
-                'lore_text': '特殊标签文本',
-
-                'button.back': '返回上一级',
-                'message.type_error': '表单解析错误, 请按提示正确填写...',
+                'button.back': '返回',
+                'message.type_error': '表单解析错误, 请按提示正确填写..',
 
                 'main_form.title': 'UShop - 主表单',
                 'main_form.content': '请选择操作...',
@@ -159,27 +152,6 @@ def load_lang(langs_dir: str) -> dict:
                 'result_form.title': '结果',
                 'result_form.content': '匹配到 {0} 个结果...',
 
-                'official_shop_add_lore.message.fail': '为物品添加特殊标签失败',
-                'official_shop_add_lore.message.fail.reason': '你的主手上没有持有任何物品...',
-                'official_shop_add_lore_form.title': '添加特殊标签',
-                'official_shop_add_lore_form.content': '请选择操作...',
-                'official_shop_add_lore_form.button.add_new_lore_text': '添加新特殊标签文本',
-
-                'official_shop_add_new_lore_text_form.title': '添加新特殊标签文本',
-                'official_shop_add_new_lore_text_form.textinput.label': '输入该物品的新特殊标签文本...',
-                'official_shop_add_new_lore_text_form.textinput.placeholder': '输入任意字符串但不能留空...',
-                'official_shop_add_new_lore_text_form.submit_button': '添加',
-
-                'official_shop_single_lore_text_form.title': '特殊标签文本',
-                'official_shop_single_lore_text_form.content': '请选择操作...',
-                'official_shop_single_lore_text_form.button.delete_lore_text': '删除该特殊标签文本',
-                'official_shop_single_lore_text_form.button.update_lore_text': '更新该特殊标签文本',
-
-                'official_shop_update_single_lore_text_form.title': '更新特殊标签文本',
-                'official_shop_update_single_lore_text_form.textinput.label': '输入该特殊标签文本的新名称...',
-                'official_shop_update_single_lore_text_form.textinput.placeholder': '输入任意字符串但不能留空...',
-                'official_shop_update_single_lore_text_form.submit_button': '更新',
-
                 'official_shop_reload_config_form.title': '重载配置文件',
                 'official_shop_reload_config_form.textinput.label': '当前回商品时, 物品堆叠的耐久度阈值 (如果该物品堆叠有耐久度)',
                 'official_shop_reload_config_form.textinput.placeholder': '输入一个 <= 1.0 的正小数或0...',
@@ -214,13 +186,6 @@ def load_lang(langs_dir: str) -> dict:
                 'only purchase': 'only purchase',
                 'only reclaim': 'only reclaim',
                 'purchase and reclaim': 'purchase and reclaim',
-
-                'item_name': 'Item name',
-                'item_type': 'Item type',
-                'item_enchants': 'Item enchant(s)',
-                'item_lore': 'Item lore',
-
-                'lore_text': 'Lore text',
 
                 'button.back': 'Back to previous',
                 'message.type_error': 'The form is parsed incorrectly, please follow the prompts to fill in correctly...',
@@ -346,27 +311,6 @@ def load_lang(langs_dir: str) -> dict:
                 'result_form.title': 'Result',
                 'result_form.content': '{0} results matched...',
 
-                'official_shop_add_lore.message.fail': 'Failed to add lore text(s) for item(s)',
-                'official_shop_add_lore.message.fail.reason': 'your mainhand is empty...',
-                'official_shop_add_lore_form.title': 'Add lore',
-                'official_shop_add_lore_form.content': 'Please select a function...',
-                'official_shop_add_lore_form.button.add_new_lore_text': 'Add a new lore text',
-
-                'official_shop_add_new_lore_text_form.title': 'Add a new lore text',
-                'official_shop_add_new_lore_text_form.textinput.label': 'Input new lore text for this item...',
-                'official_shop_add_new_lore_text_form.textinput.placeholder': 'Input any string but cannot be blank...',
-                'official_shop_add_new_lore_text_form.submit_button': 'Add',
-
-                'official_shop_single_lore_text_form.title': 'Lore text',
-                'official_shop_single_lore_text_form.content': 'Please select a function...',
-                'official_shop_single_lore_text_form.button.delete_lore_text': 'Delete this lore text',
-                'official_shop_single_lore_text_form.button.update_lore_text': 'Update this lore text',
-
-                'official_shop_update_single_lore_text_form.title': 'Update lore text',
-                'official_shop_update_single_lore_text_form.textinput.label': 'Input new name of this lore text...',
-                'official_shop_update_single_lore_text_form.textinput.placeholder': 'Input any string but cannot be blank...',
-                'official_shop_update_single_lore_text_form.submit_button': 'Update',
-
                 'official_shop_reload_config_form.title': 'Reload configurations',
                 'official_shop_reload_config_form.textinput.label': 'The current durability threshold of an item stack (if this item stack has durability) when reclaiming goods',
                 'official_shop_reload_config_form.textinput.placeholder': 'Input a positive decimal <= 1.0 or zero...',
@@ -382,10 +326,10 @@ def load_lang(langs_dir: str) -> dict:
 
     lang_data = {}
 
-    for lang in os.listdir(langs_dir):
+    for lang in os.listdir(lang_dir):
         lang_name = lang.strip('.json')
 
-        lang_file_path = os.path.join(langs_dir, lang)
+        lang_file_path = os.path.join(lang_dir, lang)
 
         with open(lang_file_path, 'r', encoding='utf-8') as f:
             lang_data[lang_name] = json.loads(f.read())
