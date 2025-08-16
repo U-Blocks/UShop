@@ -1,0 +1,69 @@
+name: Update Clone Count
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  update-clone-count:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Initialize clone count file
+        run: |
+          if [ ! -f clone_count.txt ]; then
+            echo "0" > clone_count.txt
+          fi
+          if [ ! -r clone_count.txt ] || [ ! -w clone_count.txt ]; then
+            echo "Cannot read or write to clone_count.txt"
+            exit 1
+          fi
+
+      - name: Get current total clone count
+        id: get-current-total
+        run: |
+          current_total=$(cat clone_count.txt)
+          echo "current_total=$current_total" >> $GITHUB_OUTPUT
+
+      - name: Get yesterday's clone count from API
+        id: get-yesterday-count
+        run: |
+          yesterday=$(date -u -d "yesterday" +"%Y-%m-%d")
+          response=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/traffic/clones")
+          yesterday_clone_count=$(echo "$response" | jq -r --arg yesterday "$yesterday" \
+            '(.clones // [])[] | select(.timestamp | startswith($yesterday)) | .count')
+          if [ -z "$yesterday_clone_count" ]; then
+            yesterday_clone_count=0
+          fi
+          echo "Yesterday's clone count: $yesterday_clone_count"
+          echo "API response: $response"
+          echo "yesterday_clone_count=$yesterday_clone_count" >> $GITHUB_OUTPUT
+
+      - name: Calculate new total clone count
+        id: calculate-new-total
+        run: |
+          new_total=$((${{ steps.get-current-total.outputs.current_total }} + ${{ steps.get-yesterday-count.outputs.yesterday_clone_count }}))
+          echo "new_total=$new_total" >> $GITHUB_OUTPUT
+
+      - name: Write new total clone count to file
+        run: |
+          echo "${{ steps.calculate-new-total.outputs.new_total }}" > clone_count.txt
+
+      - name: Commit and push changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git add clone_count.txt
+            git commit -m "Update clone count"
+            git push
+          else
+            echo "No changes to commit."
+          fi
