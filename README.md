@@ -1,3 +1,5 @@
+## UShop
+
 <code><a href="https://github.com/umarurize/UShop"><img height="25" src="https://github.com/umarurize/UShop/blob/master/logo/UShop.jpg" alt="UShop" /></a>&nbsp;UShop</code>
 
 ![Total Git clones](https://img.shields.io/badge/dynamic/json?label=Total%20Git%20clones&query=$&url=https://cdn.jsdelivr.net/gh/umarurize/UShop@master/clone_count.txt&color=brightgreen)
@@ -134,7 +136,6 @@ you can download the operation document folder of this repo to learn how to use 
   <img src="https://github.com/umarurize/UShop/blob/master/logo/UShop2.png" style="max-width: 100%; height: auto;">
 </div>
 
-### Development plans
-As soon as relevant API of EndstoneMC is available, Ushop will roll out the `player shop` feature
+</br>
 
 ![](https://img.shields.io/badge/language-python-blue.svg) [![GitHub License](https://img.shields.io/github/license/umarurize/UTP)](LICENSE)
