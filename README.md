@@ -1,14 +1,12 @@
-![header](https://capsule-render.vercel.app/api?type=venom&height=150&color=gradient&text=UShop&fontColor=0:8871e5,100:b678c4&fontSize=50&desc=A%20powerful%20shop%20system%20plug-in%.&descAlignY=80&descSize=20&animation=fadeIn)
-
-****
-
 <code><a href="https://github.com/umarurize/UShop"><img height="25" src="https://github.com/umarurize/UShop/blob/master/logo/UShop.jpg" alt="UShop" /></a>&nbsp;UShop</code>
 
 ![Total Git clones](https://img.shields.io/badge/dynamic/json?label=Total%20Git%20clones&query=$&url=https://cdn.jsdelivr.net/gh/umarurize/UShop@master/clone_count.txt&color=brightgreen)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/umarurize/UShop/total)
 
 ### :bell:Introductions
-* **Customizable lore for items**
+* **Multiple ecnonomy cores support**
+    *  UMoney
+    *  arc_core 
 * **Easy to create shop categories**
     *  Shop categories' icons can be automatically created
     *  Shop categories can be edited at any time through GUI forms
@@ -29,12 +27,33 @@
 *  **Items' durability can be detected during reclaiming process**
 *  **Good collections**
 *  **Good search**
+*  **DLCs**
+   *  ULore (A plugin that allows you to add or edit lore for items)
+   *  Player shop (under development)
+   *  Customizable disenchantment (under development)
 *  **Full GUI support**
 *  **Hot reload support**
 *  **Local languages support**
         
 ### :hammer:Installation
-[Required pre-plugin] [UMoney](https://github.com/umarurize/UMoney)
+<details>
+<summary>Check your Endstone's version</summary>
+
+*  **Endstone 0.10.0+**
+   *   250816
+*  **Endstone 0.7.3 - Endstone 0.8.2**
+    *  250511 
+*  **Endstone 0.6.0 - Endstone 0.7.2**
+    *  250309
+    *  250227
+    
+</details>
+
+[Optional pre-plugin] [UMoney](https://github.com/umarurize/UMoney)
+
+[Optional pre-plugin] [arc_core](https://github.com/umarurize/UMoney)
+
+*At least one of UMoney and arc_core should be installed on the server*
 
 [Optional pre-plugin] ZX_UI
 
@@ -47,6 +66,7 @@ Now, you can get the release version form this repo or <code><a href="https://ww
 ```
 Plugins/
 ├─ ushop/
+│  ├─ textures.json
 │  ├─ config.json
 │  ├─ shop.json
 │  ├─ lang/
