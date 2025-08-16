@@ -30,7 +30,7 @@
 *  **Good collections**
 *  **Good search**
 *  **DLCs**
-   *  ULore (A plugin that allows you to add or edit lore for items)
+   *  [ULore](https://github.com/umarurize/ULore) (A plugin that allows you to add or edit lore for items)
    *  Player shop (under development)
    *  Customizable disenchantment (under development)
 *  **Full GUI support**
@@ -53,7 +53,7 @@
 
 [Optional pre-plugin] [UMoney](https://github.com/umarurize/UMoney)
 
-[Optional pre-plugin] [arc_core](https://github.com/umarurize/UMoney)
+[Optional pre-plugin] [arc_core](https://github.com/DEVILENMO/EndstoneMC-ARC-Core-Plugin)
 
 *At least one of UMoney and arc_core should be installed on the server*
 
