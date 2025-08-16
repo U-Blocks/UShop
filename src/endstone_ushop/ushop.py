@@ -11,7 +11,7 @@ from endstone.form import ActionForm, ModalForm, Dropdown, TextInput
 from endstone.event import event_handler, PlayerInteractEvent
 
 from endstone_ushop.lang import load_lang_data
-from endstone_ushop.textures import load_textures
+from endstone_ushop.textures import load_textures_data
 
 current_dir = os.getcwd()
 
@@ -23,6 +23,8 @@ if not os.path.exists(first_dir):
 shop_data_file_path = os.path.join(first_dir, 'shop.json')
 
 config_data_file_path = os.path.join(first_dir, 'config.json')
+
+textures_data_file_path = os.path.join(first_dir, 'textures.json')
 
 lang_dir = os.path.join(first_dir, 'lang')
 
@@ -64,7 +66,7 @@ class ushop(Plugin):
         self.lang_data = load_lang_data(lang_dir)
 
         # Load textures
-        self.textures = load_textures()
+        self.textures_data = load_textures_data(textures_data_file_path)
 
         self.good_enchant_translation_keys = {}
 
@@ -1996,8 +1998,8 @@ class ushop(Plugin):
 
     # Get texture
     def get_texture(self, texture_key: str):
-        if self.textures.get(texture_key) is not None:
-            texture_value = self.textures[texture_key]
+        if self.textures_data.get(texture_key) is not None:
+            texture_value = self.textures_data[texture_key]
 
             return texture_value
         else:

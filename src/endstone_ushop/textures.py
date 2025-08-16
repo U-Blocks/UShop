@@ -1,7 +1,11 @@
+import os
+import json
 
-def load_textures() -> dict:
 
-    textures = {
+def load_textures_data(textures_data_file_path: str) -> dict:
+    if not os.path.exists(textures_data_file_path):
+        with open(textures_data_file_path, 'w', encoding='utf-8') as f:
+            textures_data = {
         "minecraft:apple": "textures/items/apple",
         "minecraft:bowl": "textures/items/bowl",
         "minecraft:mushroom_stew": "textures/items/mushroom_stew",
@@ -765,5 +769,10 @@ def load_textures() -> dict:
         "minecraft:grass_path": "textures/blocks/grass_path_side",
         "minecraft:bee_nest": "textures/blocks/bee_nest_front"
     }
+            json_str = json.dumps(textures_data, indent=4, ensure_ascii=False)
+            f.write(json_str)
+    else:
+        with open(textures_data_file_path, 'r', encoding='utf-8') as f:
+            textures_data = json.loads(f.read())
 
-    return textures
+    return textures_data
