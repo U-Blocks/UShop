@@ -157,9 +157,6 @@ def load_lang_data(lang_dir: str) -> dict:
                 'official_shop_reload_config_form.textinput.placeholder': '输入一个 <= 1.0 的正小数或0...',
                 'official_shop_reload_config_form.submit_button': '重载',
                 'official_shop_reload_config.message.success': '重载配置文件成功...',
-
-                'player_shop_form.title': '玩家商店',
-                'player_shop_form.content': '即将完成...',
             }
             json_str = json.dumps(zh_CN, indent=4, ensure_ascii=False)
             f.write(json_str)
@@ -316,9 +313,6 @@ def load_lang_data(lang_dir: str) -> dict:
                 'official_shop_reload_config_form.textinput.placeholder': 'Input a positive decimal <= 1.0 or zero...',
                 'official_shop_reload_config_form.submit_button': 'Reload',
                 'official_shop_reload_config.message.success': 'Successfully reload configurations...',
-
-                'player_shop_form.title': 'Player shop',
-                'player_shop_form.content': 'Coming soon...',
             }
 
             json_str = json.dumps(en_US, indent=4, ensure_ascii=False)

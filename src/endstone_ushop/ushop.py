@@ -134,7 +134,7 @@ class ushop(Plugin):
     }
 
     def on_command(self, sender: CommandSender, command: Command, args: list[str]) -> None:
-        if command.name == 'us' or command.name == 'US':
+        if command.name == 'us':
             if not isinstance(sender, Player):
                 sender.send_message(
                     f'{ColorFormat.RED}'
@@ -164,14 +164,6 @@ class ushop(Plugin):
                 f'{self.get_text(player, "main_form.button.official_shop")}',
                 icon='textures/ui/permissions_op_crown',
                 on_click=self.official_shop
-            )
-
-            # Button - Player shop
-            main_form.add_button(
-                f'{ColorFormat.YELLOW}'
-                f'{self.get_text(player, "main_form.button.player_shop")}',
-                icon='textures/ui/FriendsIcon',
-                on_click=self.player_shop
             )
 
             # Button - Reload configurations
@@ -1919,25 +1911,6 @@ class ushop(Plugin):
         official_shop_reload_config_form.on_submit = on_submit
 
         player.send_form(official_shop_reload_config_form)
-
-    # Player shop: main form
-    def player_shop(self, player: Player):
-        player_shop_form = ActionForm(
-            title=f'{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}'
-                  f'{self.get_text(player, "player_shop_form.title")}',
-            content=f'{ColorFormat.GREEN}'
-                    f'{self.get_text(player, "player_shop_form.content")}',
-            on_close=self.back_to_main_form
-        )
-
-        player_shop_form.add_button(
-            f'{ColorFormat.YELLOW}'
-            f'{self.get_text(player, "button.back")}',
-            icon='textures/ui/refresh_light',
-            on_click=self.back_to_main_form
-        )
-
-        player.send_form(player_shop_form)
 
     # Save shop data
     def save_shop_data(self):
