@@ -13,9 +13,9 @@
     *  Shop categories' icons can be automatically created
     *  Shop categories can be edited at any time through GUI forms
 * **Easy to add goods**
-    *  goods' names can be automatically getted (local languages support)
-    *  goods' icons can be automatically getted
-    *  goods' attributes can be automatically getted
+    *  goods' names can be automatically got (local languages support)
+    *  goods' icons can be automatically got
+    *  goods' attributes can be automatically got
         *  enchantments (local languages support)
         *  lore
         *  type
